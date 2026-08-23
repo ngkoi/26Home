@@ -1,0 +1,7 @@
+#!/bin/sh
+
+# Set correct permissions for SolidGlass resources
+chmod -R 755 "/var/jb/Library/Application Support/26Home/SolidGlass"
+chown -R mobile:mobile "/var/jb/Library/Application Support/26Home/SolidGlass"
+
+exit 0

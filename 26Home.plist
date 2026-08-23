@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Filter</key>
+	<dict>
+		<key>Bundles</key>
+		<array>
+			<string>com.apple.springboard</string>
+			<string>com.apple.UIKitCore</string>
+			<string>com.apple.Preferences</string>
+			<string>com.apple.Spotlight</string>
+			<string>com.apple.SearchUI</string>
+			<string>com.apple.IconServices</string>
+			<string>com.apple.searchd</string>
+			<string>com.apple.UserNotificationsUI</string>
+		</array>
+		<key>Executables</key>
+		<array>
+			<string>iconservicesagent</string>
+		</array>
+	</dict>
+</dict>
+</plist>

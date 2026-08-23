@@ -1,0 +1,76 @@
+# ====================================
+# Theos & Build Artifacts
+# ====================================
+.theos/
+packages/
+*.deb
+*.dylib
+*.o
+*.obj
+
+# ====================================
+# Temporary Logs, Dumps & Scratch
+# ====================================
+*.log
+*.txt
+*dump*.txt
+scratch/
+*_extracted/
+*backup*/
+*backup*
+
+# ====================================
+# Temporary Helper & Diagnostic Scripts
+# ====================================
+patch*.py
+extract*.py
+fix*.py
+test*.m
+test*.py
+test*.png
+revert*.py
+restore*.py
+reconstruct*.py
+trace*.py
+debug*.py
+find*.py
+assemble*.py
+clean*.py
+build_tabbar.py
+rewire_tabbar.py
+apply_circles.py
+update*.py
+update_menu.patch
+view_old_update.m
+clear_icon_*.png
+compress.sh
+Hooks_*.x
+Hooks_*.txt
+HomeCustomizationMenu_*.m
+full_rebuild.py
+robust_rebuild.py
+parse_crash.py
+recover_hooks.py
+remove_*.py
+replay_*.py
+search_*.py
+Logger.x
+
+# ====================================
+# Reference & External Directories
+# ====================================
+Anemone-OSS/
+Atria/
+LGBackend/
+griddy/
+iOS26_Icons/
+liquidass-next/
+solstice_extracted/
+
+# ====================================
+# OS & Editor Files
+# ====================================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
