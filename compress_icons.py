@@ -14,7 +14,25 @@ from PIL import Image
 import numpy as np
 
 BASE_DIR = "/home/ngkhoi/26Home/layout/Library/Application Support/26Home/SolidGlass"
-TARGET_FOLDERS = ["ClearLight", "ClearDark", "Dark", "Light"]
+TARGET_FOLDERS = ["DarkNS"]
+
+def to_exact_palette(im_rgba):
+    """Lossless RGBA->PNG8+tRNS for images with <=256 unique colors (bit-exact roundtrip)."""
+    arr = np.array(im_rgba)
+    flat = arr.reshape(-1, 4)
+    uniq, inverse = np.unique(flat, axis=0, return_inverse=True)
+    k = len(uniq)
+    if k > 256:
+        return None
+    pal_img = Image.new("P", im_rgba.size)
+    palette = np.zeros(768, np.uint8)
+    palette[:k * 3] = uniq[:, :3].ravel()
+    pal_img.putpalette(palette.tobytes())
+    pal_img.frombytes(inverse.reshape(arr.shape[:2]).astype(np.uint8).tobytes())
+    pal_img.info["transparency"] = uniq[:, 3].tobytes()
+    buf = io.BytesIO()
+    pal_img.save(buf, format="PNG", optimize=True, compress_level=9)
+    return buf.getvalue()
 
 def compress_single_icon(args_tuple):
     """
@@ -23,6 +41,9 @@ def compress_single_icon(args_tuple):
       - 'lossless' (default): 100% bit-exact for visible pixels + dirty alpha zeroing.
       - 'truecolor-7': 7-bit TrueColor RGBA (2.1 million colors, 0% noise/dithering).
       - 'truecolor-6': 6-bit TrueColor RGBA (262k colors, 0% noise/dithering).
+      - 'max-lossless': exact-palette conversion (<=256-color files) + oxipng zopfli
+        re-deflate. Every output is decoded and compared pixel-for-pixel against the
+        input before being written. Requires `pip install pyoxipng`.
     """
     file_path, mode = args_tuple
     try:
@@ -46,7 +67,7 @@ def compress_single_icon(args_tuple):
             elif mode == "truecolor-6":
                 # Mask out 2 least-significant bits (262k colors, no grain)
                 arr[:, :, :3] = (arr[:, :, :3] & 0xFC) | ((arr[:, :, :3] >> 6) & 0x03)
-            # else: 'lossless' keeps 100% exact RGB for all alpha > 0 pixels
+            # else: 'lossless'/'max-lossless' keeps 100% exact RGB for all alpha > 0 pixels
             
             im_clean = Image.fromarray(arr, "RGBA")
             
@@ -54,6 +75,27 @@ def compress_single_icon(args_tuple):
             buf = io.BytesIO()
             im_clean.save(buf, format="PNG", optimize=True, compress_level=9)
             compressed_data = buf.getvalue()
+            
+            # Step 3: max-lossless extras (still bit-exact, verified below)
+            if mode == "max-lossless":
+                import oxipng
+                pal_data = to_exact_palette(im_clean)
+                if pal_data is not None and len(pal_data) < len(compressed_data):
+                    compressed_data = pal_data
+                tmp = file_path + ".mx_tmp"
+                with open(tmp, "wb") as f:
+                    f.write(compressed_data)
+                oxipng.optimize(tmp, output=tmp + ".o", level=6)
+                with open(tmp + ".o", "rb") as f:
+                    zop_data = f.read()
+                os.remove(tmp)
+                os.remove(tmp + ".o")
+                if len(zop_data) < len(compressed_data):
+                    compressed_data = zop_data
+                # Accept only pixel-perfect results
+                if not np.array_equal(np.array(Image.open(io.BytesIO(compressed_data)).convert("RGBA")), arr):
+                    compressed_data = buf.getvalue()
+            
             new_size = len(compressed_data)
             
             if new_size < orig_size:
@@ -68,12 +110,20 @@ def compress_single_icon(args_tuple):
 
 def main():
     parser = argparse.ArgumentParser(description="High-Fidelity 26Home SolidGlass Icon Compressor")
-    parser.add_argument("--mode", choices=["lossless", "truecolor-7", "truecolor-6"], default="lossless",
-                        help="Compression mode: 'lossless' (100%% exact, 0 loss), 'truecolor-7' (2.1M colors, no grain), 'truecolor-6' (262k colors, no grain)")
+    parser.add_argument("--mode", choices=["lossless", "truecolor-7", "truecolor-6", "max-lossless"], default="lossless",
+                        help="Compression mode: 'lossless' (100%% exact, 0 loss), 'max-lossless' (palette+zopfli, 100%% exact), 'truecolor-7' (2.1M colors, no grain), 'truecolor-6' (262k colors, no grain)")
     args = parser.parse_args()
+    
+    if args.mode == "max-lossless":
+        try:
+            import oxipng  # noqa: F401
+        except ImportError:
+            print("Error: --mode max-lossless requires pyoxipng:  pip install pyoxipng")
+            sys.exit(1)
     
     mode_names = {
         "lossless": "100% Pure Lossless (Dirty-Alpha Zeroing + Level 9 Deflate)",
+        "max-lossless": "Maximum Lossless (Exact-Palette + Zopfli, Pixel-Verified)",
         "truecolor-7": "7-Bit High-Fidelity TrueColor (2.1M Colors, Zero Grain)",
         "truecolor-6": "6-Bit High-Fidelity TrueColor (262k Colors, Zero Grain)"
     }

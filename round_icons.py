@@ -13,7 +13,7 @@ from PIL import Image, ImageDraw
 import numpy as np
 
 BASE_DIR = "/home/ngkhoi/26Home/layout/Library/Application Support/26Home/SolidGlass"
-TARGET_FOLDERS = ["ClearLight", "ClearDark", "Dark", "Light"]
+TARGET_FOLDERS = ["ClearLight", "ClearDark", "Dark", "Light", "DefaultNS", "DarkNS"]
 CORNER_RADIUS_RATIO = 0.225
 
 def make_squircle_mask(size):
