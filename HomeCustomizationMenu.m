@@ -29,6 +29,39 @@ static void save26Pref(NSString *key, id value) {
 @end
 
 @implementation LGSpecularHighlightView
+- (CGFloat)_bottomOffset {
+    if ([UIDevice currentDevice].userInterfaceIdiom == UIUserInterfaceIdiomPad) {
+        CGFloat dockHeight = 0.0;
+        if (NSClassFromString(@"SBIconController")) {
+            id iconController = nil;
+            if ([NSClassFromString(@"SBIconController") respondsToSelector:@selector(sharedInstance)]) {
+                iconController = [NSClassFromString(@"SBIconController") performSelector:@selector(sharedInstance)];
+            }
+            if (iconController && [iconController respondsToSelector:@selector(floatingDockController)]) {
+                id floatDockCtrl = [iconController performSelector:@selector(floatingDockController)];
+                if (floatDockCtrl && [floatDockCtrl respondsToSelector:@selector(floatingDockView)]) {
+                    UIView *dockView = [floatDockCtrl performSelector:@selector(floatingDockView)];
+                    if (dockView && dockView.window && !dockView.hidden) {
+                        CGRect dockFrame = [dockView convertRect:dockView.bounds toView:self];
+                        if (dockFrame.size.height > 0 && dockFrame.origin.y > 0) {
+                            dockHeight = self.bounds.size.height - dockFrame.origin.y;
+                        }
+                    }
+                }
+            }
+        }
+        if (dockHeight <= 0.0) {
+            dockHeight = 96.0;
+        }
+        return dockHeight + 14.0;
+    }
+    return 8.0;
+}
+
+- (CGFloat)_restingYForMenuHeight:(CGFloat)menuHeight {
+    return self.bounds.size.height - menuHeight - [self _bottomOffset];
+}
+
 - (instancetype)initWithFrame:(CGRect)frame {
     self = [super initWithFrame:frame];
     if (self) {
@@ -75,7 +108,7 @@ static inline __attribute__((unused)) UIImage *LGCreateScaleButtonImage(BOOL isL
     UIGraphicsBeginImageContextWithOptions(totalSize, NO, 0.0);
     [[UIColor blackColor] setFill];
     
-    // Bottom alignment
+    // bottom alignment
     CGFloat bottomY = totalSize.height;
     CGFloat smallY = bottomY - smallSize.height;
     CGFloat largeY = bottomY - largeSize.height;
@@ -182,7 +215,7 @@ static inline __attribute__((unused)) UIImage *LGCreateScaleButtonImage(BOOL isL
     };
     
     if (animated) {
-        // Fast, smooth, non-bouncy easeInOut animation matching SpringBoard icon scale duration (0.25s)
+        // match sb icon scale duration (0.25s)
         [UIView animateWithDuration:0.25 delay:0 options:UIViewAnimationOptionCurveEaseInOut animations:updateBlock completion:nil];
     } else {
         updateBlock();
@@ -781,6 +814,39 @@ static inline __attribute__((unused)) UIImage *LGCreateScaleButtonImage(BOOL isL
 
 @implementation LGSegmentLensView
 
+- (CGFloat)_bottomOffset {
+    if ([UIDevice currentDevice].userInterfaceIdiom == UIUserInterfaceIdiomPad) {
+        CGFloat dockHeight = 0.0;
+        if (NSClassFromString(@"SBIconController")) {
+            id iconController = nil;
+            if ([NSClassFromString(@"SBIconController") respondsToSelector:@selector(sharedInstance)]) {
+                iconController = [NSClassFromString(@"SBIconController") performSelector:@selector(sharedInstance)];
+            }
+            if (iconController && [iconController respondsToSelector:@selector(floatingDockController)]) {
+                id floatDockCtrl = [iconController performSelector:@selector(floatingDockController)];
+                if (floatDockCtrl && [floatDockCtrl respondsToSelector:@selector(floatingDockView)]) {
+                    UIView *dockView = [floatDockCtrl performSelector:@selector(floatingDockView)];
+                    if (dockView && dockView.window && !dockView.hidden) {
+                        CGRect dockFrame = [dockView convertRect:dockView.bounds toView:self];
+                        if (dockFrame.size.height > 0 && dockFrame.origin.y > 0) {
+                            dockHeight = self.bounds.size.height - dockFrame.origin.y;
+                        }
+                    }
+                }
+            }
+        }
+        if (dockHeight <= 0.0) {
+            dockHeight = 96.0;
+        }
+        return dockHeight + 14.0;
+    }
+    return 8.0;
+}
+
+- (CGFloat)_restingYForMenuHeight:(CGFloat)menuHeight {
+    return self.bounds.size.height - menuHeight - [self _bottomOffset];
+}
+
 - (instancetype)initWithFrame:(CGRect)frame {
     self = [super initWithFrame:frame];
     if (self) {
@@ -788,26 +854,26 @@ static inline __attribute__((unused)) UIImage *LGCreateScaleButtonImage(BOOL isL
         self.backgroundColor = [UIColor clearColor];
         self.clipsToBounds = YES;
         
-        // 1. Adjustable Blur
+        // backdrop blur
         _blurView = [[LGAdjustableBlurView alloc] initWithFrame:self.bounds blurRadius:3.0];
         _blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
         _blurView.layer.masksToBounds = YES;
         [self addSubview:_blurView];
         
-        // 2. Live Glass Refraction
+        // liquid glass refraction
         _glassView = [[LGLiveBackdropView alloc] initWithFrame:self.bounds];
         _glassView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
         _glassView.layer.masksToBounds = YES;
         [self addSubview:_glassView];
         
-        // 3. Faint Translucent White Highlight Fill
+        // highlight fill
         _highlightView = [[UIView alloc] initWithFrame:self.bounds];
         _highlightView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
         _highlightView.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.22];
         _highlightView.layer.masksToBounds = YES;
         [self addSubview:_highlightView];
         
-        // 4. Subtle Liquid Glass Rim Highlight
+        // specular rim
         self.layer.borderWidth = 0.5;
         self.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.35].CGColor;
         
@@ -868,7 +934,7 @@ static inline __attribute__((unused)) UIImage *LGCreateScaleButtonImage(BOOL isL
     
     UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:20 weight:UIFontWeightMedium];
     if (@available(iOS 15.0, *)) {
-        // Example of SF Symbols hierarchical color support!
+        // sf symbols color config
         UIImageSymbolConfiguration *colorConfig = [UIImageSymbolConfiguration configurationWithHierarchicalColor:(next ? [UIColor whiteColor] : [UIColor colorWithWhite:1.0 alpha:0.5])];
         config = [config configurationByApplyingConfiguration:colorConfig];
     }
@@ -878,7 +944,7 @@ static inline __attribute__((unused)) UIImage *LGCreateScaleButtonImage(BOOL isL
     [UIView transitionWithView:sender duration:0.3 options:UIViewAnimationOptionTransitionCrossDissolve animations:^{
         [sender setImage:newImage forState:UIControlStateNormal];
         sender.tintColor = next ? [UIColor whiteColor] : [UIColor colorWithWhite:1.0 alpha:0.5];
-        // Removed rotation
+        // no rotation
     } completion:nil];
     
     [[NSNotificationCenter defaultCenter] postNotificationName:@"ngkhoi.26home.UpdateWallpaperDimming" object:nil];
@@ -906,7 +972,7 @@ static inline __attribute__((unused)) UIImage *LGCreateScaleButtonImage(BOOL isL
         UILabel *selectedLabel = self.styleLabels[index];
         
         void (^updateBlock)(void) = ^{
-            // Update label colors
+            // update text colors
             for (int i = 0; i < self.styleLabels.count; i++) {
                 UILabel *lbl = self.styleLabels[i];
                 if (i == index) {
@@ -918,7 +984,7 @@ static inline __attribute__((unused)) UIImage *LGCreateScaleButtonImage(BOOL isL
                 }
             }
             
-            // Move pill
+            // animate pill frame
             CGSize textSize = [selectedLabel.text sizeWithAttributes:@{NSFontAttributeName: selectedLabel.font}];
             CGRect pillFrame = selectedLabel.frame;
             CGFloat center = CGRectGetMidX(pillFrame);
@@ -944,7 +1010,7 @@ static inline __attribute__((unused)) UIImage *LGCreateScaleButtonImage(BOOL isL
     if (lbl.hidden || !lbl.text.length) return CGRectZero;
     
     CGSize textSize = [lbl.text sizeWithAttributes:@{NSFontAttributeName: [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold]}];
-    CGFloat pillW = textSize.width + 18.0; // compact, fitting the label
+    CGFloat pillW = textSize.width + 18.0; // fit label width
     CGFloat pillH = 28.0;
     CGFloat centerX = lbl.center.x;
     CGFloat centerY = lbl.center.y;
@@ -972,7 +1038,7 @@ static inline __attribute__((unused)) UIImage *LGCreateScaleButtonImage(BOOL isL
     void (^updateBlock)(void) = ^{
         CGRect menuFrame = self.menuView.frame;
         menuFrame.size.height = menuHeight;
-        menuFrame.origin.y = self.bounds.size.height - menuHeight - 8.0;
+        menuFrame.origin.y = [self _restingYForMenuHeight:menuHeight];
         self.menuView.frame = menuFrame;
         
         self.slidersContainer.alpha = isTinted ? 1.0 : 0.0;
@@ -1038,7 +1104,7 @@ static inline __attribute__((unused)) UIImage *LGCreateScaleButtonImage(BOOL isL
     }
     
     NSUInteger index = [modes indexOfObject:mode];
-    if (index == NSNotFound) index = modes.count - 1; // Default to last option (Auto)
+    if (index == NSNotFound) index = modes.count - 1; // default to auto
     
     if (index < self.themeLabels.count) {
         CGRect targetPillFrame = [self _themePillFrameForIndex:(NSInteger)index];
@@ -1126,7 +1192,7 @@ static inline __attribute__((unused)) UIImage *LGCreateScaleButtonImage(BOOL isL
         CGFloat dx = loc.x - self.themeDragStartX;
         CGFloat rawCenterX = self.themePillXAtDragStart + dx;
         
-        // Rubber-band past edges
+        // rubberband past edges
         CGFloat clampedCenterX = rawCenterX;
         if (rawCenterX < minCenterX) {
             clampedCenterX = minCenterX - sqrt(fmax(0.0, minCenterX - rawCenterX)) * 1.8;
@@ -1134,7 +1200,7 @@ static inline __attribute__((unused)) UIImage *LGCreateScaleButtonImage(BOOL isL
             clampedCenterX = maxCenterX + sqrt(fmax(0.0, rawCenterX - maxCenterX)) * 1.8;
         }
         
-        // Interpolate width smoothly between segment labels
+        // lerp pill width between segments
         CGFloat pct = (clampedCenterX - minCenterX) / MAX(maxCenterX - minCenterX, 1.0);
         pct = MAX(0.0, MIN((CGFloat)(count - 1), pct * (count - 1)));
         NSInteger lowerIdx = (NSInteger)floor(pct);
@@ -1144,7 +1210,7 @@ static inline __attribute__((unused)) UIImage *LGCreateScaleButtonImage(BOOL isL
         CGRect fLow = [self _themePillFrameForIndex:lowerIdx];
         CGRect fHigh = [self _themePillFrameForIndex:upperIdx];
         
-        // Velocity-based motion stretch
+        // velocity stretch
         CGFloat velX = [pan velocityInView:self.themeSegmentContainer].x;
         CGFloat normalizedVel = fmin(fabs(velX) / 800.0, 1.0);
         CGFloat motionStretch = pow(normalizedVel, 0.7) * 8.0;
@@ -1155,7 +1221,7 @@ static inline __attribute__((unused)) UIImage *LGCreateScaleButtonImage(BOOL isL
         self.themeLensPill.bounds = CGRectMake(0, 0, currentW, currentH);
         self.themeLensPill.center = CGPointMake(clampedCenterX, self.themeSegmentContainer.bounds.size.height / 2.0);
         
-        // Find closest segment for label highlighting
+        // snap to nearest segment
         NSInteger closestIdx = (NSInteger)round(pct);
         closestIdx = MAX(0, MIN((NSInteger)count - 1, closestIdx));
         
@@ -1223,7 +1289,7 @@ static inline __attribute__((unused)) UIImage *LGCreateScaleButtonImage(BOOL isL
         NSString *style = styles[index];
         Home26Log(@"[Menu] selectStyle tapped: style=%@", style);
         
-        if (index == 3) { // Tinted tapped
+        if (index == 3) { // tinted selected
             NSTimeInterval now = [NSDate timeIntervalSinceReferenceDate];
             if (now - self.lastTintedTapTime < 1.8) {
                 self.tintedTapCount++;
@@ -1249,6 +1315,39 @@ static inline __attribute__((unused)) UIImage *LGCreateScaleButtonImage(BOOL isL
     }
 }
 
+- (CGFloat)_bottomOffset {
+    if ([UIDevice currentDevice].userInterfaceIdiom == UIUserInterfaceIdiomPad) {
+        CGFloat dockHeight = 0.0;
+        if (NSClassFromString(@"SBIconController")) {
+            id iconController = nil;
+            if ([NSClassFromString(@"SBIconController") respondsToSelector:@selector(sharedInstance)]) {
+                iconController = [NSClassFromString(@"SBIconController") performSelector:@selector(sharedInstance)];
+            }
+            if (iconController && [iconController respondsToSelector:@selector(floatingDockController)]) {
+                id floatDockCtrl = [iconController performSelector:@selector(floatingDockController)];
+                if (floatDockCtrl && [floatDockCtrl respondsToSelector:@selector(floatingDockView)]) {
+                    UIView *dockView = [floatDockCtrl performSelector:@selector(floatingDockView)];
+                    if (dockView && dockView.window && !dockView.hidden) {
+                        CGRect dockFrame = [dockView convertRect:dockView.bounds toView:self];
+                        if (dockFrame.size.height > 0 && dockFrame.origin.y > 0) {
+                            dockHeight = self.bounds.size.height - dockFrame.origin.y;
+                        }
+                    }
+                }
+            }
+        }
+        if (dockHeight <= 0.0) {
+            dockHeight = 96.0;
+        }
+        return dockHeight + 14.0;
+    }
+    return 8.0;
+}
+
+- (CGFloat)_restingYForMenuHeight:(CGFloat)menuHeight {
+    return self.bounds.size.height - menuHeight - [self _bottomOffset];
+}
+
 - (instancetype)initWithFrame:(CGRect)frame {
     self = [super initWithFrame:frame];
     if (self) {
@@ -1259,24 +1358,29 @@ static inline __attribute__((unused)) UIImage *LGCreateScaleButtonImage(BOOL isL
         self.styleButtons = [NSMutableArray array];
         self.styleButtons = [NSMutableArray array];
         
-        // 1. Dimming Backdrop
+        // dim bg
         UIButton *bgButton = [UIButton buttonWithType:UIButtonTypeCustom];
         bgButton.frame = self.bounds;
         [bgButton addTarget:self action:@selector(dismiss) forControlEvents:UIControlEventTouchUpInside];
         [self addSubview:bgButton];
         
-        // 2. Main Container View
+        // main menu container
         CGFloat height = 230;
-        self.menuView = [[UIView alloc] initWithFrame:CGRectMake(10, frame.size.height, frame.size.width - 20, height)];
+        CGFloat menuWidth = frame.size.width - 20;
+        if ([UIDevice currentDevice].userInterfaceIdiom == UIUserInterfaceIdiomPad) {
+            menuWidth = MIN(frame.size.width - 40.0, 480.0);
+        }
+        CGFloat menuX = (frame.size.width - menuWidth) / 2.0;
+        self.menuView = [[UIView alloc] initWithFrame:CGRectMake(menuX, frame.size.height, menuWidth, height)];
         self.menuView.layer.cornerRadius = 40;
         self.menuView.layer.masksToBounds = YES;
         
-        // 4. Edge Stroke (Replaced with Specular Highlight)
+        // specular rim
         self.menuView.layer.borderWidth = 0.0;
         LGSpecularHighlightView *specularView = [[LGSpecularHighlightView alloc] initWithFrame:self.menuView.bounds];
         specularView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
         
-        // 3. Glass Blur Layer (LiquidGlass Refraction + Blur)
+        // glass & blur backdrop
         LGAdjustableBlurView *blurView = [[LGAdjustableBlurView alloc] initWithFrame:self.menuView.bounds blurRadius:4.0];
         blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
         blurView.layer.cornerRadius = 40;
@@ -1289,7 +1393,7 @@ static inline __attribute__((unused)) UIImage *LGCreateScaleButtonImage(BOOL isL
         glassView.clipsToBounds = YES;
         [self.menuView addSubview:glassView];
         
-        // 35% Dark Tint Overlay
+        // dark tint overlay
         UIView *darkTintLayer = [[UIView alloc] initWithFrame:self.menuView.bounds];
         darkTintLayer.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
         darkTintLayer.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.35];
@@ -1300,7 +1404,7 @@ static inline __attribute__((unused)) UIImage *LGCreateScaleButtonImage(BOOL isL
         
         [self.menuView addSubview:specularView];
         
-        // Handle race condition for liquid glass
+        // reapply filters if race on show
         __weak LGLiveBackdropView *weakBackdrop = glassView;
         __weak LGLiveBackdropView *weakThemeLens = (LGLiveBackdropView *)self.themePill;
         for (NSNumber *delay in @[@0.5, @1.5, @3.0, @5.0, @8.0]) {
@@ -1310,12 +1414,12 @@ static inline __attribute__((unused)) UIImage *LGCreateScaleButtonImage(BOOL isL
             });
         }
         
-        // 6. Interactive Pull-Up Gesture
+        // pull-up gesture
         UIPanGestureRecognizer *menuPan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handleMenuPull:)];
         menuPan.delegate = self;
         [self.menuView addGestureRecognizer:menuPan];
         
-        // Title
+        // title
         UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 18, self.menuView.frame.size.width, 30)];
         titleLabel.text = @"Customize";
         titleLabel.textColor = [UIColor whiteColor];
@@ -1323,7 +1427,7 @@ static inline __attribute__((unused)) UIImage *LGCreateScaleButtonImage(BOOL isL
         titleLabel.font = [UIFont systemFontOfSize:17 weight:UIFontWeightSemibold];
         [self.menuView addSubview:titleLabel];
         
-        // 8. Interactive Controls
+        // controls
         NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.ngkhoi.26home"];
         BOOL isDimmed = [defaults boolForKey:@"ngkhoi.26home.dimWallpaper"];
         BOOL isLarge = [defaults boolForKey:@"ngkhoi.26home.largeIcons"];
@@ -1336,7 +1440,7 @@ static inline __attribute__((unused)) UIImage *LGCreateScaleButtonImage(BOOL isL
         
         UIButton *sunBtn = [UIButton buttonWithType:UIButtonTypeSystem];
         sunBtn.frame = CGRectMake(20, 20, 40, 40);
-        sunBtn.center = CGPointMake(45, 18 + 15); // titleLabel center.y
+        sunBtn.center = CGPointMake(45, 18 + 15);
         [sunBtn setImage:(isDimmed ? LGImageNamed(@"sun.lefthalf.filled") : [UIImage systemImageNamed:@"sun.max" withConfiguration:config]) forState:UIControlStateNormal];
         sunBtn.tintColor = isDimmed ? [UIColor whiteColor] : [UIColor colorWithWhite:1.0 alpha:0.5];
         [sunBtn addTarget:self action:@selector(toggleWallpaperDimming:) forControlEvents:UIControlEventTouchUpInside];
@@ -1412,7 +1516,7 @@ static inline __attribute__((unused)) UIImage *LGCreateScaleButtonImage(BOOL isL
             [self.styleLabels addObject:lbl];
         }
         
-        // Highlight Pill
+        // highlight pill
         self.highlightPill = [[UIView alloc] initWithFrame:CGRectZero];
         self.highlightPill.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.25];
         self.highlightPill.layer.cornerRadius = 12.0;
@@ -1423,11 +1527,11 @@ static inline __attribute__((unused)) UIImage *LGCreateScaleButtonImage(BOOL isL
         self.themeSegmentContainer.userInteractionEnabled = YES;
         [self.menuView addSubview:self.themeSegmentContainer];
         
-        // Liquid Glass Segment Lens Pill
+        // segment lens pill
         self.themeLensPill = [[LGSegmentLensView alloc] initWithFrame:CGRectZero];
         [self.themeSegmentContainer addSubview:self.themeLensPill];
         
-        // Light / Dark / Auto Segment
+        // light / dark / auto segment
         for (int i=0; i<3; i++) {
             UIButton *btn = [[UIButton alloc] initWithFrame:CGRectZero];
             btn.tag = 200 + i;
@@ -1462,11 +1566,11 @@ static inline __attribute__((unused)) UIImage *LGCreateScaleButtonImage(BOOL isL
 
 - (void)_setupTintedUI {
     self.slidersContainer = [[UIView alloc] initWithFrame:CGRectMake(20, 170, self.menuView.frame.size.width - 40, 150)];
-    self.slidersContainer.alpha = 0.0; // Hidden by default
+    self.slidersContainer.alpha = 0.0; // hidden by default
     self.slidersContainer.userInteractionEnabled = NO;
     [self.menuView addSubview:self.slidersContainer];
     
-    // 1. Hue Slider
+    // hue slider
     CGFloat sliderH = 32.0;
     CGFloat thumbSize = 36.0;
     self.hueSlider = [[UIView alloc] initWithFrame:CGRectMake(0, 0, self.slidersContainer.frame.size.width, sliderH)];
@@ -1509,7 +1613,7 @@ static inline __attribute__((unused)) UIImage *LGCreateScaleButtonImage(BOOL isL
     UITapGestureRecognizer *hueTap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleHuePan:)];
     [self.hueSlider addGestureRecognizer:hueTap];
     
-    // 2. Brightness Slider
+    // brightness slider
     self.brightnessSlider = [[UIView alloc] initWithFrame:CGRectMake(0, 48, self.slidersContainer.frame.size.width, sliderH)];
     self.brightnessSlider.clipsToBounds = NO;
     [self.slidersContainer addSubview:self.brightnessSlider];
@@ -1545,7 +1649,7 @@ static inline __attribute__((unused)) UIImage *LGCreateScaleButtonImage(BOOL isL
     UITapGestureRecognizer *brTap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleBrightnessPan:)];
     [self.brightnessSlider addGestureRecognizer:brTap];
     
-    // 3. Buttons Row
+    // buttons row
     CGFloat btnY = 96;
     CGFloat btnSize = 50;
     CGFloat containerW = self.slidersContainer.frame.size.width;
@@ -1571,7 +1675,7 @@ static inline __attribute__((unused)) UIImage *LGCreateScaleButtonImage(BOOL isL
         btn.frame = CGRectMake(x, btnY, btnSize, btnSize);
         btn.tag = [cfg[@"tag"] integerValue];
         
-        // Outer stroke ring (50x50, faint gray stroke with small gap to inner circle)
+        // outer ring
         UIView *ring = [[UIView alloc] initWithFrame:btn.bounds];
         ring.layer.cornerRadius = btnSize / 2.0;
         ring.layer.borderWidth = 1.0;
@@ -1582,7 +1686,7 @@ static inline __attribute__((unused)) UIImage *LGCreateScaleButtonImage(BOOL isL
         ring.alpha = 1.0;
         [btn addSubview:ring];
         
-        // Inner circle fill (42x42, centered with 4pt margin)
+        // inner circle fill
         CGFloat fillSize = 42.0;
         CGFloat fillOffset = (btnSize - fillSize) / 2.0;
         UIView *circle = [[UIView alloc] initWithFrame:CGRectMake(fillOffset, fillOffset, fillSize, fillSize)];
@@ -1593,7 +1697,7 @@ static inline __attribute__((unused)) UIImage *LGCreateScaleButtonImage(BOOL isL
         circle.tag = 20;
         [btn addSubview:circle];
         
-        // Center icon
+        // center glyph
         UIImageView *iconView = [[UIImageView alloc] initWithFrame:CGRectMake((fillSize - 22) / 2.0, (fillSize - 22) / 2.0, 22, 22)];
         iconView.contentMode = UIViewContentModeScaleAspectFit;
         iconView.tintColor = [UIColor whiteColor];
@@ -1617,7 +1721,7 @@ static inline __attribute__((unused)) UIImage *LGCreateScaleButtonImage(BOOL isL
         [btn addTarget:self action:actionSel forControlEvents:UIControlEventTouchUpInside];
         [self.slidersContainer addSubview:btn];
     }
-    // Load values
+    // load values
     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.ngkhoi.26home"];
     self.currentHue = [defaults floatForKey:@"ngkhoi.26home.tintHue"];
     if (self.currentHue == 0 && ![defaults objectForKey:@"ngkhoi.26home.tintHue"]) {
@@ -1722,14 +1826,14 @@ static inline __attribute__((unused)) UIImage *LGCreateScaleButtonImage(BOOL isL
     CGFloat sat = 1.0 - self.currentBrightness;
     UIColor *currentColor = [UIColor colorWithHue:self.currentHue saturation:sat brightness:1.0 alpha:1.0];
 
-    // Update tinted icon preview overlay (tag 999)
+    // update live tint overlay
     UIButton *tintedBtn = (UIButton *)[self.menuView viewWithTag:103];
     UIView *overlay = [tintedBtn viewWithTag:999];
     if (overlay) {
         overlay.backgroundColor = [currentColor colorWithAlphaComponent:0.45];
     }
 
-    // Update Eyedropper button (tag 1104) circle fill color
+    // update eyedropper circle color
     UIButton *eyeBtn = (UIButton *)[self.slidersContainer viewWithTag:1104];
     UIView *eyeCircle = [eyeBtn viewWithTag:20];
     if (eyeCircle) {
@@ -1741,7 +1845,7 @@ static inline __attribute__((unused)) UIImage *LGCreateScaleButtonImage(BOOL isL
     save26Pref(@"ngkhoi.26home.tintHue", @(self.currentHue));
     save26Pref(@"ngkhoi.26home.tintBrightness", @(self.currentBrightness));
     
-    // Calculate hex string
+    // calc hex string
     CGFloat sat = 1.0 - self.currentBrightness;
     UIColor *color = [UIColor colorWithHue:self.currentHue saturation:sat brightness:1.0 alpha:1.0];
     CGFloat r, g, b, a;
@@ -1766,7 +1870,7 @@ static inline __attribute__((unused)) UIImage *LGCreateScaleButtonImage(BOOL isL
     NSString *hex = [NSString stringWithFormat:@"#%02lX%02lX%02lX", lroundf(r * 255), lroundf(g * 255), lroundf(b * 255)];
     save26Pref(@"ngkhoi.26home.tintColor", hex);
     
-    // Only send a lightweight notification that updates the glass tint color without reloading images
+    // fast tint update without reloading icons
     [[NSNotificationCenter defaultCenter] postNotificationName:@"ngkhoi.26home.UpdateLiveTintColor" object:nil];
 }
 
@@ -1895,10 +1999,10 @@ static inline __attribute__((unused)) UIImage *LGCreateScaleButtonImage(BOOL isL
 }
 - (void)eyedropperTapped {
     [UIView animateWithDuration:0.3 animations:^{
-        self.alpha = 0.0; // Hide ourselves
+        self.alpha = 0.0; // hide menu
     }];
     
-    // Notify Hooks.x to hide icons and dock
+    // hide icons/dock during eyedropper
     [[NSNotificationCenter defaultCenter] postNotificationName:@"ngkhoi.26home.EyedropperStart" object:nil];
     
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
@@ -1910,7 +2014,7 @@ static inline __attribute__((unused)) UIImage *LGCreateScaleButtonImage(BOOL isL
         for (UIWindow *w in [[UIApplication sharedApplication] windows]) {
 #pragma clang diagnostic pop
             if (w.hidden || w.alpha < 0.01) continue;
-            // Don't draw our own window if it's separate, though self is hidden anyway
+            // skip our own window
             [w drawViewHierarchyInRect:w.bounds afterScreenUpdates:YES];
         }
         UIImage *snapshot = UIGraphicsGetImageFromCurrentImageContext();
@@ -1922,7 +2026,7 @@ static inline __attribute__((unused)) UIImage *LGCreateScaleButtonImage(BOOL isL
             if ([color getHue:&h saturation:&s brightness:&b alpha:&a]) {
                 CGFloat boostedSat = 0.0;
                 if (s < 0.08) {
-                    boostedSat = 0.0; // Pure white / monochrome
+                    boostedSat = 0.0; // monochrome
                 } else {
                     boostedSat = MIN(1.0, s * 1.8);
                 }
@@ -1951,34 +2055,32 @@ static inline __attribute__((unused)) UIImage *LGCreateScaleButtonImage(BOOL isL
         CGPoint hueLoc = [touch locationInView:self.hueSlider];
         CGPoint brLoc = [touch locationInView:self.brightnessSlider];
         if (CGRectContainsPoint(self.hueSlider.bounds, hueLoc) || CGRectContainsPoint(self.brightnessSlider.bounds, brLoc)) {
-            return NO; // Allow horizontal sliders to receive touches without interference
+            return NO; // let sliders receive touches
         }
     }
     
     CGPoint segLoc = [touch locationInView:self.themeSegmentContainer];
     if (self.themeSegmentContainer.alpha > 0.5 && CGRectContainsPoint(self.themeSegmentContainer.bounds, segLoc)) {
         if ([gestureRecognizer.view isEqual:self.menuView]) {
-            return NO; // Prevent menu pull gesture when swiping horizontal segmented control
+            return NO; // prevent menu pull on segment swipe
         }
     }
     return YES;
 }
 
 - (void)handleMenuPull:(UIPanGestureRecognizer *)gesture {
-    CGFloat restingY = self.bounds.size.height - self.menuView.frame.size.height - 8.0;
+    CGFloat restingY = [self _restingYForMenuHeight:self.menuView.frame.size.height];
     CGPoint translation = [gesture translationInView:self];
     
     if (gesture.state == UIGestureRecognizerStateChanged) {
         CGFloat dy = translation.y;
         if (dy < 0) {
-            // Pulling UP: Rubber-band resistance
             CGFloat pulledUp = -dy;
             CGFloat resistedOffset = (250.0 * pulledUp) / (250.0 + pulledUp) * 0.75;
             CGRect f = self.menuView.frame;
             f.origin.y = restingY - resistedOffset;
             self.menuView.frame = f;
         } else {
-            // Pulling DOWN: Gentle resistance
             CGFloat resistedOffset = (180.0 * dy) / (180.0 + dy) * 0.65;
             CGRect f = self.menuView.frame;
             f.origin.y = restingY + resistedOffset;
@@ -1988,11 +2090,9 @@ static inline __attribute__((unused)) UIImage *LGCreateScaleButtonImage(BOOL isL
         CGPoint velocity = [gesture velocityInView:self];
         CGFloat dy = translation.y;
         
-        // If pulled down far with positive downward velocity, dismiss
         if (dy > 90 || velocity.y > 600) {
             [self dismiss];
         } else {
-            // Sucked back into its old resting place with spring animation!
             CGFloat initialVel = -velocity.y / 250.0;
             [UIView animateWithDuration:0.55 delay:0 usingSpringWithDamping:0.68 initialSpringVelocity:initialVel options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionAllowUserInteraction animations:^{
                 CGRect f = self.menuView.frame;
@@ -2017,7 +2117,7 @@ static inline __attribute__((unused)) UIImage *LGCreateScaleButtonImage(BOOL isL
     
     [UIView animateWithDuration:0.7 delay:0 usingSpringWithDamping:0.8 initialSpringVelocity:0.0 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionAllowUserInteraction animations:^{
         CGRect newFrame = self.menuView.frame;
-        newFrame.origin.y = self.bounds.size.height - newFrame.size.height - 8.0;
+        newFrame.origin.y = [self _restingYForMenuHeight:newFrame.size.height];
         self.menuView.frame = newFrame;
         
         self.menuView.alpha = 1.0;

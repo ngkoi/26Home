@@ -4,22 +4,20 @@
 
 + (instancetype)sharedGenerator;
 
-// Main entry point for hooked image views.
-// Returns the styled image immediately if cached.
-// If not, returns nil, processes in the background, and posts a notification when done.
+// main entry for icon hooks (returns cached or dispatches async)
 - (UIImage *)requestStyledImageForImage:(UIImage *)orig bundleID:(NSString *)bundleID;
 
-// Request styled image with baked-in background (for folders, spotlight, etc.)
+// baked bg for folders, spotlight, prefs
 - (UIImage *)requestIconImageWithBackgroundForImage:(UIImage *)orig bundleID:(NSString *)bundleID;
 
-// Original image storage
+// orig icon cache
 - (void)saveOriginalImage:(UIImage *)image forBundleID:(NSString *)bundleID;
 - (UIImage *)originalImageForBundleID:(NSString *)bundleID;
 
-// Clears the memory cache
+// clear mem cache
 - (void)clearCache;
 
-// Clears the disk cache
+// clear disk cache
 - (void)clearDiskCache;
 
 @end

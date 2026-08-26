@@ -9,16 +9,16 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     
-    // Create the hero header view
+    // hero header view
     UIView *headerView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, self.view.frame.size.width, 220)];
     headerView.autoresizingMask = UIViewAutoresizingFlexibleWidth;
 
-    // Retrieve the tweak icon from the preferences bundle
+    // load tweak icon from bundle
     NSBundle *bundle = [NSBundle bundleForClass:[self class]];
     NSString *iconPath = [bundle pathForResource:@"header_icon@3x" ofType:@"png"];
     UIImage *icon = [UIImage imageWithContentsOfFile:iconPath];
 
-    // Shadow container for the icon
+    // icon shadow container
     UIView *shadowContainer = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 86, 86)];
     shadowContainer.center = CGPointMake(headerView.frame.size.width / 2.0, 90);
     shadowContainer.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleRightMargin;
@@ -28,17 +28,17 @@
     shadowContainer.layer.shadowRadius = 14;
     [headerView addSubview:shadowContainer];
 
-    // The actual icon view
+    // icon view
     UIImageView *iconView = [[UIImageView alloc] initWithImage:icon];
     iconView.frame = shadowContainer.bounds;
-    iconView.layer.cornerRadius = 19; // ~22.37% of 86
+    iconView.layer.cornerRadius = 19; // ~22.4% squircle
     if (@available(iOS 13.0, *)) {
         iconView.layer.cornerCurve = kCACornerCurveContinuous;
     }
     iconView.clipsToBounds = YES;
     [shadowContainer addSubview:iconView];
 
-    // Main Title
+    // title
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 150, headerView.frame.size.width, 36)];
     titleLabel.text = @"26Home";
     titleLabel.font = [UIFont systemFontOfSize:34 weight:UIFontWeightHeavy];
@@ -46,7 +46,7 @@
     titleLabel.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     [headerView addSubview:titleLabel];
 
-    // Subtitle
+    // subtitle
     UILabel *subtitleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 186, headerView.frame.size.width, 20)];
     subtitleLabel.text = @"iOS 26 Home screen customization tweak";
     subtitleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightMedium];
@@ -55,7 +55,7 @@
     subtitleLabel.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     [headerView addSubview:subtitleLabel];
 
-    // Assign the custom view to the top of the PSListController table
+    // attach header view to table
     UITableView *tableView = [self valueForKey:@"_table"];
     if (!tableView && [self respondsToSelector:@selector(table)]) {
         tableView = [self performSelector:@selector(table)];
@@ -104,7 +104,7 @@
         [fm removeItemAtPath:userIconCache error:nil];
     }
     
-    // Tell SpringBoard to dump its memory & disk caches and refresh icons
+    // purge sb icon cache & refresh
     notify_post("ngkhoi.26home.clearCache");
     
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Cache Cleared"

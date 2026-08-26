@@ -1,9 +1,10 @@
 #import "Headers.h"
+#import "LGButtonView.h"
 #import "LGCustomIconGenerator2.h"
 #import <notify.h>
 
 static id GetIconGenerator() {
-    return [%c(LGCustomIconGenerator2) sharedGenerator];
+    return [LGCustomIconGenerator2 sharedGenerator];
 }
 #import <UIKit/UIKit.h>
 
@@ -18,16 +19,140 @@ BOOL g_largeIconsEnabled = NO;
 BOOL g_disableLiquidGlassIcons = NO;
 BOOL g_keepAppIconBlur = YES;
 NSDictionary *g_excludedApps = nil;
+BOOL g_exceptionsApplyOnlyToSolid = YES;
 
 BOOL isAppExcluded(NSString *bundleID) {
     if (!bundleID || !g_excludedApps) return NO;
     NSNumber *val = g_excludedApps[bundleID];
-    return val ? [val boolValue] : NO;
+    BOOL isExcluded = val ? [val boolValue] : NO;
+    
+    if (!isExcluded) return NO;
+    
+    if (g_exceptionsApplyOnlyToSolid) {
+        NSString *style = g_iconStyle ?: @"Default";
+        // keep clear/tinted generated even if excluded
+        if ([style isEqualToString:@"Clear"] || [style isEqualToString:@"Tinted"]) {
+            return NO;
+        }
+    }
+    
+    return YES;
 }
-static UIWindow *g_dimmingWindow = nil;
+@interface _26HomeDimmingViewController : UIViewController
+@end
+
+@implementation _26HomeDimmingViewController
+
+- (BOOL)shouldAutorotate {
+    return YES;
+}
+
+- (UIInterfaceOrientationMask)supportedInterfaceOrientations {
+    return UIInterfaceOrientationMaskAll;
+}
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.view.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.25];
+    self.view.userInteractionEnabled = NO;
+    self.view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+}
+
+- (void)viewWillLayoutSubviews {
+    [super viewWillLayoutSubviews];
+    if (self.view.window) {
+        self.view.frame = self.view.window.bounds;
+    }
+}
+
+@end
+
+@interface _26HomeDimmingWindow : UIWindow
+@end
+
+@implementation _26HomeDimmingWindow
+
+- (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
+    return nil; // pass-through touches completely
+}
+
+- (BOOL)pointInside:(CGPoint)point withEvent:(UIEvent *)event {
+    return NO; // pass-through touches completely
+}
+
+- (BOOL)_canBecomeKeyWindow {
+    return NO;
+}
+
+- (BOOL)_canAffectStatusBarAppearance {
+    return NO;
+}
+
+- (BOOL)_shouldControlAutorotation {
+    return YES;
+}
+
+@end
+
+static _26HomeDimmingWindow *g_dimmingWindow = nil;
+
+static void updateWallpaperDimmingState(BOOL animated) {
+    if (!g_dimmingWindow) {
+        g_dimmingWindow = [[_26HomeDimmingWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
+        g_dimmingWindow.userInteractionEnabled = NO;
+        g_dimmingWindow.windowLevel = -2.5; // between wallpaper (-3.0) and hs (-2.0)
+        g_dimmingWindow.rootViewController = [[_26HomeDimmingViewController alloc] init];
+    }
+    
+    if (!g_dimmingWindow.windowScene) {
+        for (UIScene *scene in [[UIApplication sharedApplication] valueForKey:@"connectedScenes"]) {
+            if ([scene isKindOfClass:NSClassFromString(@"UIWindowScene")]) {
+                g_dimmingWindow.windowScene = (UIWindowScene *)scene;
+                break;
+            }
+        }
+    }
+    
+    g_dimmingWindow.frame = [UIScreen mainScreen].bounds;
+    if (g_dimmingWindow.rootViewController) {
+        g_dimmingWindow.rootViewController.view.frame = g_dimmingWindow.bounds;
+    }
+    
+    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.ngkhoi.26home"];
+    BOOL shouldDim = [defaults boolForKey:@"ngkhoi.26home.dimWallpaper"];
+    
+    if (shouldDim) {
+        g_dimmingWindow.hidden = NO;
+        if (animated) {
+            [UIView animateWithDuration:0.3 animations:^{
+                g_dimmingWindow.alpha = 1.0;
+            }];
+        } else {
+            g_dimmingWindow.alpha = 1.0;
+        }
+    } else {
+        if (animated) {
+            [UIView animateWithDuration:0.3 animations:^{
+                g_dimmingWindow.alpha = 0.0;
+            } completion:^(BOOL finished) {
+                if (![defaults boolForKey:@"ngkhoi.26home.dimWallpaper"]) {
+                    g_dimmingWindow.hidden = YES;
+                }
+            }];
+        } else {
+            g_dimmingWindow.alpha = 0.0;
+            g_dimmingWindow.hidden = YES;
+        }
+    }
+}
+
 CGFloat g_appIconBlurRadius = 1.0;
 BOOL g_isAppOpening = NO;
 BOOL g_isFolderOpen = NO;
+BOOL g_isHomeScreenVisible = YES;
+BOOL g_isSwitcherOpen = NO;
+BOOL g_isCoverSheetVisible = NO;
+BOOL g_isEditingMode = NO;
 NSString *g_menuAppearance = @"iOS26";
 
 void reload26HomePrefs(void) {
@@ -45,6 +170,11 @@ void reload26HomePrefs(void) {
     g_largeIconsEnabled = [prefs boolForKey:@"ngkhoi.26home.largeIcons"];
     g_disableLiquidGlassIcons = CFPreferencesGetAppBooleanValue(CFSTR("ngkhoi.26home.disableLiquidGlassIcons"), CFSTR("com.ngkhoi.26home"), NULL);
     g_excludedApps = [prefs dictionaryForKey:@"ngkhoi.26home.excludedApps"] ?: @{};
+    if ([prefs objectForKey:@"ngkhoi.26home.exceptionsApplyOnlyToSolid"]) {
+        g_exceptionsApplyOnlyToSolid = [prefs boolForKey:@"ngkhoi.26home.exceptionsApplyOnlyToSolid"];
+    } else {
+        g_exceptionsApplyOnlyToSolid = YES;
+    }
     
     g_menuAppearance = @"iOS26";
     
@@ -61,13 +191,36 @@ void reload26HomePrefs(void) {
     }
 }
 
+static void notifyAllIconsVisibilityChanged(void) {
+    id iconController = nil;
+    if ([%c(SBIconController) respondsToSelector:@selector(sharedInstance)]) {
+        iconController = [%c(SBIconController) performSelector:@selector(sharedInstance)];
+    }
+    if (iconController) {
+        id iconManager = nil;
+        if ([iconController respondsToSelector:@selector(iconManager)]) {
+            iconManager = [iconController performSelector:@selector(iconManager)];
+        } else {
+            iconManager = iconController;
+        }
+        if (iconManager && [iconManager respondsToSelector:@selector(enumerateKnownIconViewsUsingBlock:)]) {
+            void (*enumerate)(id, SEL, void (^)(id)) = (void (*)(id, SEL, void (^)(id)))[iconManager methodForSelector:@selector(enumerateKnownIconViewsUsingBlock:)];
+            enumerate(iconManager, @selector(enumerateKnownIconViewsUsingBlock:), ^(UIView *iconView) {
+                if ([iconView respondsToSelector:@selector(_26home_updateGlassVisibility)]) {
+                    [iconView performSelector:@selector(_26home_updateGlassVisibility)];
+                }
+            });
+        }
+    }
+}
+
 static __weak id g_editingDoneTarget = nil;
 static SEL g_editingDoneAction = NULL;
 
 static void replaceMaterialViewWithLiquidGlass(UIView *button, CGFloat blurRadius) {
-    if ([button viewWithTag:999]) return; // Already applied
+    if ([button viewWithTag:999]) return; // already applied
     
-    // Hide all native subviews
+    // hide native subviews
     for (UIView *subview in button.subviews) {
         subview.hidden = YES;
         subview.alpha = 0;
@@ -80,50 +233,13 @@ static void replaceMaterialViewWithLiquidGlass(UIView *button, CGFloat blurRadiu
     CGFloat y = (b.size.height > height) ? (b.size.height - height) / 2.0 : 0;
     CGRect initialFrame = CGRectMake(x, y, width, height);
     
-    // Create a container cover view fitting the compact pill size
-    UIView *coverView = [[UIView alloc] initWithFrame:initialFrame];
-    coverView.userInteractionEnabled = NO;
-    coverView.tag = 999;
+    NSString *title = [button isKindOfClass:%c(SBHEditingDoneButton)] ? @"Done" : @"Edit";
+    LGButtonView *btnView = [[LGButtonView alloc] initWithFrame:initialFrame title:title blurRadius:blurRadius];
+    btnView.tag = 999;
+    [button addSubview:btnView];
     
-    CGFloat radius = height / 2.0; // 14.0
-    
-    LGAdjustableBlurView *blurView = [[LGAdjustableBlurView alloc] initWithFrame:coverView.bounds blurRadius:blurRadius];
-    blurView.qualityScale = 0.35;
-    blurView.clipsToBounds = YES;
-    blurView.layer.cornerRadius = radius;
-    blurView.tag = 996;
-    
-    LGLiveBackdropView *lgView = [[LGLiveBackdropView alloc] initWithFrame:coverView.bounds];
-    lgView.qualityScale = 0.35;
-    lgView.clipsToBounds = YES;
-    lgView.layer.cornerRadius = radius;
-    lgView.tag = 998;
-    
-    // Specular highlight border
-    lgView.layer.borderWidth = 0.5;
-    lgView.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.35].CGColor;
-    
-    [coverView addSubview:blurView];
-    [coverView addSubview:lgView];
-    
-    // Custom label
-    UILabel *titleLabel = [[UILabel alloc] initWithFrame:coverView.bounds];
-    titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightMedium];
-    titleLabel.textColor = [UIColor labelColor]; 
-    titleLabel.textAlignment = NSTextAlignmentCenter;
-    titleLabel.tag = 997;
-    
-    if ([button isKindOfClass:%c(SBHEditingDoneButton)]) {
-        titleLabel.text = @"Done";
-    } else {
-        titleLabel.text = @"Edit";
-    }
-    [coverView addSubview:titleLabel];
-    
-    [button addSubview:coverView];
-    
-    // Force reapply for registration race
-    __weak LGLiveBackdropView *weakBackdrop = lgView;
+    // reapply filters if race on launch
+    __weak LGLiveBackdropView *weakBackdrop = btnView.lgView;
     for (NSNumber *delay in @[@0.5, @1.5, @3.0, @5.0, @8.0]) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay.doubleValue * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             [weakBackdrop forceReapplyForRegistrationRace];
@@ -132,33 +248,17 @@ static void replaceMaterialViewWithLiquidGlass(UIView *button, CGFloat blurRadiu
 }
 
 static void updateLiquidGlassLayout(UIView *button) {
-    UIView *coverView = [button viewWithTag:999];
-    if (coverView) {
+    LGButtonView *coverView = (LGButtonView *)[button viewWithTag:999];
+    if (coverView && [coverView isKindOfClass:[LGButtonView class]]) {
         CGFloat width = 56.0;
         CGFloat height = 28.0;
         CGRect b = button.bounds;
         CGFloat x = (b.size.width > width) ? (b.size.width - width) / 2.0 : 0;
         CGFloat y = (b.size.height > height) ? (b.size.height - height) / 2.0 : 0;
-        coverView.frame = CGRectMake(x, y, width, height);
-        
-        CGFloat radius = height / 2.0;
-        LGAdjustableBlurView *blurView = [coverView viewWithTag:996];
-        if (blurView) {
-            blurView.frame = coverView.bounds;
-            blurView.layer.cornerRadius = radius;
-        }
-        LGLiveBackdropView *lgView = [coverView viewWithTag:998];
-        if (lgView) {
-            lgView.frame = coverView.bounds;
-            lgView.layer.cornerRadius = radius;
-        }
-        UILabel *titleLabel = [coverView viewWithTag:997];
-        if (titleLabel) {
-            titleLabel.frame = coverView.bounds;
-        }
+        [coverView updateLayoutWithFrame:CGRectMake(x, y, width, height)];
     }
     
-    // Keep all native subviews hidden
+    // keep native subviews hidden
     for (UIView *subview in button.subviews) {
         if (subview.tag != 999) {
             subview.hidden = YES;
@@ -176,12 +276,21 @@ static void updateLiquidGlassLayout(UIView *button) {
     updateLiquidGlassLayout(self);
 }
 
+
+
+
+
+
+
+
+
+
 - (void)didMoveToWindow {
     %orig;
     if (self.window) {
         replaceMaterialViewWithLiquidGlass(self, 8.0);
         
-        // Setup standard Context Menu if iOS 14+
+        // context menu on ios 14+
         if (@available(iOS 14.0, *)) {
             self.showsMenuAsPrimaryAction = YES;
             __weak typeof(self) weakSelf = self;
@@ -194,7 +303,7 @@ static void updateLiquidGlassLayout(UIView *button) {
             }];
             
             UIAction *customize = [UIAction actionWithTitle:@"Customize" image:LGImageNamed(@"apps.iphone.badge.paintbrush") identifier:nil handler:^(__kindof UIAction * _Nonnull action) {
-                // Emulate a tap on the native "Done" button to completely exit edit mode everywhere!
+                // tap done button to exit edit mode
                 if (g_editingDoneTarget && g_editingDoneAction) {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
@@ -202,7 +311,7 @@ static void updateLiquidGlassLayout(UIView *button) {
 #pragma clang diagnostic pop
                 }
                 
-                // Fallback: Tell SBIconController to stop editing globally
+                // fallback: tell iconcontroller to stop editing
                 id iconController = [%c(SBIconController) sharedInstance];
                 if ([iconController respondsToSelector:@selector(setIsEditing:)]) {
                     void (*setIsEditing)(id, SEL, BOOL) = (void (*)(id, SEL, BOOL))[iconController methodForSelector:@selector(setIsEditing:)];
@@ -216,8 +325,7 @@ static void updateLiquidGlassLayout(UIView *button) {
                     SBRootFolderController *rootVC = (SBRootFolderController *)vc;
                     [rootVC setEditing:NO animated:YES];
                     
-                    // To exit edit mode completely (including dismissing the Done button and re-enabling app launches), 
-                    // we can simply find the "Done" button on the screen and programmatically tap it!
+                    // tap done button on screen
                     BOOL foundDoneButton = NO;
                     NSMutableArray *viewQueue = [NSMutableArray array];
 #pragma clang diagnostic push
@@ -241,7 +349,7 @@ static void updateLiquidGlassLayout(UIView *button) {
                     }
                     
                     if (!foundDoneButton) {
-                        // Fallback: Iterative loop to force exit edit mode on ALL view controllers
+                        // fallback: loop view controllers to exit edit mode
                         NSMutableArray *queue = [NSMutableArray array];
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
@@ -292,14 +400,14 @@ static void updateLiquidGlassLayout(UIView *button) {
                 
                 UIViewController *vc = getViewControllerForView(weakSelf);
                 if ([vc respondsToSelector:@selector(setEditing:animated:)]) {
-                    // Safe cast to call setEditing:animated: with BOOL arguments
+                    // safe setEditing:animated: call
                     void (*setEditing)(id, SEL, BOOL, BOOL) = (void (*)(id, SEL, BOOL, BOOL))[vc methodForSelector:@selector(setEditing:animated:)];
                     if (setEditing) {
                         setEditing(vc, @selector(setEditing:animated:), NO, YES);
                     }
                 }
                 
-                // Dispatch to a background queue to prevent deadlocking SpringBoard's main thread during the IPC call to LaunchServices
+                // bg dispatch to avoid sb main thread deadlock on ipc
                 dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
                     NSURL *url = [NSURL URLWithString:@"prefs:root=Wallpaper"];
                     id workspace = [NSClassFromString(@"LSApplicationWorkspace") performSelector:@selector(defaultWorkspace)];
@@ -334,20 +442,113 @@ static void updateLiquidGlassLayout(UIView *button) {
     self.alpha = 1.0;
 }
 
+
+- (BOOL)beginTrackingWithTouch:(UITouch *)touch withEvent:(UIEvent *)event {
+    BOOL result = %orig;
+    LGButtonView *btnView = (LGButtonView *)[self viewWithTag:999];
+    if (btnView && [btnView isKindOfClass:[LGButtonView class]]) {
+        CGPoint pt = [touch locationInView:btnView];
+        [btnView handleTouchDownAtPoint:pt];
+    }
+    return result;
+}
+
+- (BOOL)continueTrackingWithTouch:(UITouch *)touch withEvent:(UIEvent *)event {
+    LGButtonView *btnView = (LGButtonView *)[self viewWithTag:999];
+    if (btnView && [btnView isKindOfClass:[LGButtonView class]]) {
+        CGPoint pt = [touch locationInView:btnView];
+        [btnView handleTouchMovedToPoint:pt];
+        return YES; // keep tracking
+    }
+    return %orig;
+}
+
+- (void)endTrackingWithTouch:(UITouch *)touch withEvent:(UIEvent *)event {
+    %orig;
+    LGButtonView *btnView = (LGButtonView *)[self viewWithTag:999];
+    if (btnView && [btnView isKindOfClass:[LGButtonView class]]) {
+        [btnView handleTouchEnded];
+    }
+}
+
+- (void)cancelTrackingWithEvent:(UIEvent *)event {
+    %orig;
+    LGButtonView *btnView = (LGButtonView *)[self viewWithTag:999];
+    if (btnView && [btnView isKindOfClass:[LGButtonView class]]) {
+        [btnView handleTouchEnded];
+    }
+}
 %end
 
-%hook SBFolderController
+%hook SBFloatyFolderController
 
 - (void)viewWillAppear:(BOOL)animated {
     %orig;
     g_isFolderOpen = YES;
     [[NSNotificationCenter defaultCenter] postNotificationName:@"ngkhoi.26home.FolderStateChanged" object:nil];
+    notifyAllIconsVisibilityChanged();
 }
 
-- (void)viewWillDisappear:(BOOL)animated {
+- (void)viewDidDisappear:(BOOL)animated {
     %orig;
     g_isFolderOpen = NO;
     [[NSNotificationCenter defaultCenter] postNotificationName:@"ngkhoi.26home.FolderStateChanged" object:nil];
+    notifyAllIconsVisibilityChanged();
+}
+
+%end
+
+%hook SBFluidSwitcherViewController
+
+- (void)viewWillAppear:(BOOL)animated {
+    %orig;
+    g_isSwitcherOpen = YES;
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"ngkhoi.26home.VisibilityStateChanged" object:nil];
+    notifyAllIconsVisibilityChanged();
+}
+
+- (void)viewDidDisappear:(BOOL)animated {
+    %orig;
+    g_isSwitcherOpen = NO;
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"ngkhoi.26home.VisibilityStateChanged" object:nil];
+    notifyAllIconsVisibilityChanged();
+}
+
+%end
+
+%hook SBHomeScreenViewController
+
+- (void)viewWillAppear:(BOOL)animated {
+    %orig;
+    g_isHomeScreenVisible = YES;
+    g_isAppOpening = NO;
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"ngkhoi.26home.VisibilityStateChanged" object:nil];
+    notifyAllIconsVisibilityChanged();
+}
+
+- (void)viewDidDisappear:(BOOL)animated {
+    %orig;
+    g_isHomeScreenVisible = NO;
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"ngkhoi.26home.VisibilityStateChanged" object:nil];
+    notifyAllIconsVisibilityChanged();
+}
+
+%end
+
+%hook CSCoverSheetViewController
+
+- (void)viewWillAppear:(BOOL)animated {
+    %orig;
+    g_isCoverSheetVisible = YES;
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"ngkhoi.26home.VisibilityStateChanged" object:nil];
+    notifyAllIconsVisibilityChanged();
+}
+
+- (void)viewDidDisappear:(BOOL)animated {
+    %orig;
+    g_isCoverSheetVisible = NO;
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"ngkhoi.26home.VisibilityStateChanged" object:nil];
+    notifyAllIconsVisibilityChanged();
 }
 
 %end
@@ -359,6 +560,15 @@ static void updateLiquidGlassLayout(UIView *button) {
     %orig;
     updateLiquidGlassLayout(self);
 }
+
+
+
+
+
+
+
+
+
 
 - (void)didMoveToWindow {
     %orig;
@@ -376,14 +586,50 @@ static void updateLiquidGlassLayout(UIView *button) {
     }
 }
 
+
+- (BOOL)beginTrackingWithTouch:(UITouch *)touch withEvent:(UIEvent *)event {
+    BOOL result = %orig;
+    LGButtonView *btnView = (LGButtonView *)[self viewWithTag:999];
+    if (btnView && [btnView isKindOfClass:[LGButtonView class]]) {
+        CGPoint pt = [touch locationInView:btnView];
+        [btnView handleTouchDownAtPoint:pt];
+    }
+    return result;
+}
+
+- (BOOL)continueTrackingWithTouch:(UITouch *)touch withEvent:(UIEvent *)event {
+    LGButtonView *btnView = (LGButtonView *)[self viewWithTag:999];
+    if (btnView && [btnView isKindOfClass:[LGButtonView class]]) {
+        CGPoint pt = [touch locationInView:btnView];
+        [btnView handleTouchMovedToPoint:pt];
+        return YES; // keep tracking
+    }
+    return %orig;
+}
+
+- (void)endTrackingWithTouch:(UITouch *)touch withEvent:(UIEvent *)event {
+    %orig;
+    LGButtonView *btnView = (LGButtonView *)[self viewWithTag:999];
+    if (btnView && [btnView isKindOfClass:[LGButtonView class]]) {
+        [btnView handleTouchEnded];
+    }
+}
+
+- (void)cancelTrackingWithEvent:(UIEvent *)event {
+    %orig;
+    LGButtonView *btnView = (LGButtonView *)[self viewWithTag:999];
+    if (btnView && [btnView isKindOfClass:[LGButtonView class]]) {
+        [btnView handleTouchEnded];
+    }
+}
 %end
 
 static void setupLiquidGlassForMinusButton(UIView *minusView) {
-    if ([minusView viewWithTag:996]) return; // Already setup
+    if ([minusView viewWithTag:996]) return;
     
     CGFloat height = minusView.bounds.size.height;
     
-    // Hide ALL native material background layers and icons
+    // hide native material bg and glyphs
     for (UIView *subview in minusView.subviews) {
         if ([NSStringFromClass([subview class]) containsString:@"Material"]) {
             for (UIView *innerView in subview.subviews) {
@@ -402,7 +648,7 @@ static void setupLiquidGlassForMinusButton(UIView *minusView) {
     blurView.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.18];
     blurView.tag = 996;
     
-    // Specular Highlight Layer
+    // specular rim layer
     CAGradientLayer *specularLayer = [CAGradientLayer layer];
     specularLayer.frame = minusView.bounds;
     specularLayer.cornerRadius = height / 2.0;
@@ -428,7 +674,7 @@ static void setupLiquidGlassForMinusButton(UIView *minusView) {
     [minusView insertSubview:blurView atIndex:0];
     [minusView.layer insertSublayer:specularLayer above:blurView.layer];
     
-    // Custom minus icon
+    // custom minus glyph
     UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:14 weight:UIImageSymbolWeightBold];
     UIImageView *minusIcon = [[UIImageView alloc] initWithFrame:minusView.bounds];
     minusIcon.image = [UIImage systemImageNamed:@"minus" withConfiguration:config];
@@ -529,7 +775,7 @@ static void updateLiquidGlassLayoutForPageCell(UIView *cell) {
     LGLiveBackdropView *lgView = [cell viewWithTag:992];
     
     if (blurView && lgView) {
-        BOOL isAnimating = cell.bounds.size.width > 120; // Normal width is ~90
+        BOOL isAnimating = cell.bounds.size.width > 120; // normal width ~90
         
         for (UIView *subview in cell.subviews) {
             if ([subview isKindOfClass:NSClassFromString(@"MTMaterialView")] && subview.frame.size.height > 100) {
@@ -688,62 +934,11 @@ static void updateTintViews(UIView *view, UIColor *tintColor) {
 - (void)applicationDidFinishLaunching:(id)application {
     %orig;
     
-        
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        UIWindow *dimmingWindow = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
-        g_dimmingWindow = dimmingWindow;
-        dimmingWindow.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.25];
-        dimmingWindow.userInteractionEnabled = NO;
-        dimmingWindow.windowLevel = -2.5; // Locked strictly between -3.0 (wallpaper) and -2.0 (homescreen)
-        
-        for (UIScene *scene in [[UIApplication sharedApplication] valueForKey:@"connectedScenes"]) {
-            if ([scene isKindOfClass:NSClassFromString(@"UIWindowScene")]) {
-                dimmingWindow.windowScene = (UIWindowScene *)scene;
-                break;
-            }
-        }
-        
-        NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.ngkhoi.26home"];
-        BOOL dim = [defaults boolForKey:@"ngkhoi.26home.dimWallpaper"];
-        dimmingWindow.hidden = !dim;
-        dimmingWindow.alpha = dim ? 1.0 : 0.0;
-        
-        objc_setAssociatedObject(self, @selector(applicationDidFinishLaunching:), dimmingWindow, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    });
+    updateWallpaperDimmingState(NO);
     
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                [[NSNotificationCenter defaultCenter] addObserverForName:@"ngkhoi.26home.UpdateWallpaperDimming" object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification * _Nonnull note) {
-            UIWindow *dimmingWindow = g_dimmingWindow ?: objc_getAssociatedObject(self, @selector(applicationDidFinishLaunching:));
-            if (!dimmingWindow) {
-                dimmingWindow = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
-                dimmingWindow.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.25];
-                dimmingWindow.userInteractionEnabled = NO;
-                dimmingWindow.windowLevel = -2.5;
-                g_dimmingWindow = dimmingWindow;
-            }
-            if (!dimmingWindow.windowScene) {
-                for (UIScene *scene in [[UIApplication sharedApplication] valueForKey:@"connectedScenes"]) {
-                    if ([scene isKindOfClass:NSClassFromString(@"UIWindowScene")]) {
-                        dimmingWindow.windowScene = (UIWindowScene *)scene;
-                        break;
-                    }
-                }
-            }
-            NSUserDefaults *def = [[NSUserDefaults alloc] initWithSuiteName:@"com.ngkhoi.26home"];
-            BOOL shouldDim = [def boolForKey:@"ngkhoi.26home.dimWallpaper"];
-            if (shouldDim) {
-                dimmingWindow.hidden = NO;
-                [UIView animateWithDuration:0.3 animations:^{
-                    dimmingWindow.alpha = 1.0;
-                }];
-            } else {
-                [UIView animateWithDuration:0.3 animations:^{
-                    dimmingWindow.alpha = 0.0;
-                } completion:^(BOOL finished) {
-                    dimmingWindow.hidden = YES;
-                }];
-            }
+        [[NSNotificationCenter defaultCenter] addObserverForName:@"ngkhoi.26home.UpdateWallpaperDimming" object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification * _Nonnull note) {
+            updateWallpaperDimmingState(YES);
         }];
         [[NSNotificationCenter defaultCenter] addObserverForName:@"ngkhoi.26home.UpdateLiveTintColor" object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification * _Nonnull note) {
             NSString *hex = g_tintColor;
@@ -849,6 +1044,8 @@ static void updateClockHandsInversionForView(UIView *view) {
     }
 }
 
+
+
 %hook SBIconView
 
 - (void)layoutSubviews {
@@ -905,14 +1102,60 @@ static void updateClockHandsInversionForView(UIView *view) {
     }
     BOOL isExcludedApp = isAppExcluded(currentBundleID);
     
-    if (isExcludedApp) {
+    BOOL isEditingMode = g_isEditingMode;
+    if (!isEditingMode && [self respondsToSelector:@selector(isEditing)]) {
+        isEditingMode = ((BOOL (*)(id, SEL))[self methodForSelector:@selector(isEditing)])(self, @selector(isEditing));
+    }
+    BOOL shouldHideForState = isExcludedApp || isEditingMode || !g_isHomeScreenVisible || g_isCoverSheetVisible || g_isSwitcherOpen || g_isAppOpening;
+    if (shouldHideForState) {
         UIView *glassView = [self viewWithTag:9001];
-        if (glassView) glassView.hidden = YES;
+        if (glassView) {
+            glassView.hidden = YES;
+            [glassView.layer setValue:@NO forKey:@"enabled"];
+        }
         UIView *blurView = [self viewWithTag:9002];
-        if (blurView) blurView.hidden = YES;
+        if (blurView) {
+            blurView.hidden = YES;
+            [blurView.layer setValue:@NO forKey:@"enabled"];
+        }
         UIView *tintView = [self viewWithTag:9003];
         if (tintView) tintView.hidden = YES;
         return;
+    }
+    
+    if (g_isFolderOpen) {
+        BOOL isInsideOpenFolder = NO;
+        if ([self respondsToSelector:@selector(location)]) {
+            NSString *loc = [self performSelector:@selector(location)];
+            if (loc && [loc isKindOfClass:[NSString class]] && ([loc isEqualToString:@"SBIconLocationFolder"] || [loc containsString:@"Folder"])) {
+                isInsideOpenFolder = YES;
+            }
+        }
+        if (!isInsideOpenFolder) {
+            UIView *v = self.superview;
+            while (v) {
+                if ([v isKindOfClass:%c(SBFloatyFolderView)]) {
+                    isInsideOpenFolder = YES;
+                    break;
+                }
+                v = v.superview;
+            }
+        }
+        if (!isInsideOpenFolder) {
+            UIView *glassView = [self viewWithTag:9001];
+            if (glassView) {
+                glassView.hidden = YES;
+                [glassView.layer setValue:@NO forKey:@"enabled"];
+            }
+            UIView *blurView = [self viewWithTag:9002];
+            if (blurView) {
+                blurView.hidden = YES;
+                [blurView.layer setValue:@NO forKey:@"enabled"];
+            }
+            UIView *tintView = [self viewWithTag:9003];
+            if (tintView) tintView.hidden = YES;
+            return;
+        }
     }
 
     BOOL isClearOrTintedLight = ([style isEqualToString:@"Clear"] || ([style isEqualToString:@"Tinted"] && !isDarkTheme)) && iconImageView && !isFolder;
@@ -1201,6 +1444,16 @@ static void updateClockHandsInversionForView(UIView *view) {
     }
 }
 
+- (void)setEditing:(BOOL)editing animated:(BOOL)animated {
+    %orig;
+    [self _26home_updateGlassVisibility];
+}
+
+- (void)setEditing:(BOOL)editing {
+    %orig;
+    [self _26home_updateGlassVisibility];
+}
+
 - (void)setMorphingFraction:(CGFloat)fraction {
     %orig;
     if (fraction > 0.0) {
@@ -1221,7 +1474,7 @@ static void updateClockHandsInversionForView(UIView *view) {
     id orig = %orig;
     if (orig) {
         [[NSNotificationCenter defaultCenter] addObserver:orig selector:@selector(_26home_iconReady:) name:@"ngkhoi.26home.IconReady" object:nil];
-        [[NSNotificationCenter defaultCenter] addObserver:orig selector:@selector(_26home_updateGlassVisibility) name:@"ngkhoi.26home.AppLaunchStateChanged" object:nil];
+        [[NSNotificationCenter defaultCenter] addObserver:orig selector:@selector(_26home_updateGlassVisibility) name:@"ngkhoi.26home.VisibilityStateChanged" object:nil];
         [[NSNotificationCenter defaultCenter] addObserver:orig selector:@selector(_26home_updateGlassVisibility) name:@"ngkhoi.26home.FolderStateChanged" object:nil];
     }
     return orig;
@@ -1242,13 +1495,51 @@ static void updateClockHandsInversionForView(UIView *view) {
         }
     }
     if (isAppExcluded(currentBundleID)) {
-        glassView.hidden = YES;
-        blurView.hidden = YES;
-        tintView.hidden = YES;
+        if (glassView) {
+            glassView.hidden = YES;
+            [glassView.layer setValue:@NO forKey:@"enabled"];
+        }
+        if (blurView) {
+            blurView.hidden = YES;
+            [blurView.layer setValue:@NO forKey:@"enabled"];
+        }
+        if (tintView) tintView.hidden = YES;
         return;
     }
     
-    // 1. App is opening or icon is highlighted/touched -> hide glass for smooth launch
+    // hide glass in edit mode
+    BOOL isEditingMode = g_isEditingMode;
+    if (!isEditingMode && [self respondsToSelector:@selector(isEditing)]) {
+        isEditingMode = ((BOOL (*)(id, SEL))[self methodForSelector:@selector(isEditing)])(self, @selector(isEditing));
+    }
+    if (isEditingMode) {
+        if (glassView) {
+            glassView.hidden = YES;
+            [glassView.layer setValue:@NO forKey:@"enabled"];
+        }
+        if (blurView) {
+            blurView.hidden = YES;
+            [blurView.layer setValue:@NO forKey:@"enabled"];
+        }
+        if (tintView) tintView.hidden = YES;
+        return;
+    }
+
+    // hide glass if hs is obscured / in-app
+    if (!g_isHomeScreenVisible || g_isCoverSheetVisible || g_isSwitcherOpen || g_isAppOpening) {
+        if (glassView) {
+            glassView.hidden = YES;
+            [glassView.layer setValue:@NO forKey:@"enabled"];
+        }
+        if (blurView) {
+            blurView.hidden = YES;
+            [blurView.layer setValue:@NO forKey:@"enabled"];
+        }
+        if (tintView) tintView.hidden = YES;
+        return;
+    }
+    
+    // hide glass while icon pressed
     BOOL isHighlighted = NO;
     if ([self respondsToSelector:@selector(isHighlighted)]) {
         isHighlighted = ((BOOL (*)(id, SEL))[self methodForSelector:@selector(isHighlighted)])(self, @selector(isHighlighted));
@@ -1257,28 +1548,32 @@ static void updateClockHandsInversionForView(UIView *view) {
     if ([self respondsToSelector:@selector(isTouchDown)]) {
         isTouchDown = ((BOOL (*)(id, SEL))[self methodForSelector:@selector(isTouchDown)])(self, @selector(isTouchDown));
     }
-    
-    if (g_isAppOpening || isHighlighted || isTouchDown) {
-        glassView.hidden = YES;
-        blurView.hidden = YES;
-        tintView.hidden = YES;
+    if (isHighlighted || isTouchDown) {
+        if (glassView) {
+            glassView.hidden = YES;
+            [glassView.layer setValue:@NO forKey:@"enabled"];
+        }
+        if (blurView) {
+            blurView.hidden = YES;
+            [blurView.layer setValue:@NO forKey:@"enabled"];
+        }
+        if (tintView) tintView.hidden = YES;
         return;
     }
     
-    // 2. Folder open state: hide all icons outside the open folder
+    // hide outside icons when folder open
     if (g_isFolderOpen) {
         BOOL isInsideOpenFolder = NO;
         if ([self respondsToSelector:@selector(location)]) {
             NSString *loc = [self performSelector:@selector(location)];
-            if (loc && [loc isKindOfClass:[NSString class]] && [loc isEqualToString:@"SBIconLocationFolder"]) {
+            if (loc && [loc isKindOfClass:[NSString class]] && ([loc isEqualToString:@"SBIconLocationFolder"] || [loc containsString:@"Folder"])) {
                 isInsideOpenFolder = YES;
             }
         }
         if (!isInsideOpenFolder) {
             UIView *v = self.superview;
             while (v) {
-                NSString *c = NSStringFromClass(v.class);
-                if ([c isEqualToString:@"SBFloatyFolderView"] || [c isEqualToString:@"SBFolderView"] || [c isEqualToString:@"SBFolderContainerView"]) {
+                if ([v isKindOfClass:%c(SBFloatyFolderView)]) {
                     isInsideOpenFolder = YES;
                     break;
                 }
@@ -1287,16 +1582,28 @@ static void updateClockHandsInversionForView(UIView *view) {
         }
         
         if (!isInsideOpenFolder) {
-            glassView.hidden = YES;
-            blurView.hidden = YES;
-            tintView.hidden = YES;
+            if (glassView) {
+                glassView.hidden = YES;
+                [glassView.layer setValue:@NO forKey:@"enabled"];
+            }
+            if (blurView) {
+                blurView.hidden = YES;
+                [blurView.layer setValue:@NO forKey:@"enabled"];
+            }
+            if (tintView) tintView.hidden = YES;
             return;
         }
     }
     
-    glassView.hidden = NO;
-    blurView.hidden = NO;
-    tintView.hidden = NO;
+    if (glassView) {
+        glassView.hidden = NO;
+        [glassView.layer setValue:@YES forKey:@"enabled"];
+    }
+    if (blurView) {
+        blurView.hidden = NO;
+        [blurView.layer setValue:@YES forKey:@"enabled"];
+    }
+    if (tintView) tintView.hidden = NO;
 }
 
 %new
@@ -1392,7 +1699,7 @@ static void updateClockHandsInversionForView(UIView *view) {
         return;
     }
     
-    // Do not scale icons in the App Library
+    // skip scaling in app library
     if ([self respondsToSelector:@selector(location)]) {
         NSString *location = [self performSelector:@selector(location)];
         if (location && [location isKindOfClass:[NSString class]]) {
@@ -1437,6 +1744,10 @@ static void updateClockHandsInversionForView(UIView *view) {
 - (UIImage *)displayedImage;
 - (struct SBIconImageInfo)iconImageInfo;
 @end
+
+%end // End SpringBoardHooks (part 1)
+
+%group IconImageViewHooks
 
 %hook SBIconImageView
 
@@ -1494,7 +1805,7 @@ static void updateClockHandsInversionForView(UIView *view) {
                         if ([currentIcon respondsToSelector:@selector(applicationBundleID)]) {
                             NSString *currentBundleID = [currentIcon performSelector:@selector(applicationBundleID)];
                             if (currentBundleID && ![currentBundleID isEqualToString:capturedBundleID]) {
-                                return; // View recycled
+                                return; // recycled view
                             }
                         }
                         
@@ -1602,6 +1913,10 @@ static void updateClockHandsInversionForView(UIView *view) {
 
 %end
 
+%end // End IconImageViewHooks
+
+%group SpringBoardHooks // Resume SpringBoardHooks (part 2)
+
 %hook SBIconBadgeView
 
 - (void)layoutSubviews {
@@ -1625,7 +1940,7 @@ static void updateClockHandsInversionForView(UIView *view) {
     if ([style isEqualToString:@"Clear"]) {
         useCustomBadge = YES;
         badgeBgColor = [UIColor whiteColor];
-        badgeTextColor = [UIColor colorWithWhite:0.22 alpha:1.0]; // Grey-black number
+        badgeTextColor = [UIColor colorWithWhite:0.22 alpha:1.0]; // dark grey text
     } else if ([style isEqualToString:@"Tinted"]) {
         useCustomBadge = YES;
         
@@ -1642,15 +1957,15 @@ static void updateClockHandsInversionForView(UIView *view) {
         CGFloat b = (rgbValue & 0xFF) / 255.0;
         badgeBgColor = [UIColor colorWithRed:r green:g blue:b alpha:1.0];
         
-        // Calculate perceived luminance to guarantee perfect readability/contrast
+        // calc luminance for badge text contrast
         CGFloat luminance = 0.299 * r + 0.587 * g + 0.114 * b;
         if (luminance > 0.55) {
-            badgeTextColor = [UIColor colorWithWhite:0.12 alpha:1.0]; // Dark charcoal for bright/light backgrounds
+            badgeTextColor = [UIColor colorWithWhite:0.12 alpha:1.0]; // dark text on bright bg
         } else {
-            badgeTextColor = [UIColor whiteColor]; // White for dark/medium backgrounds
+            badgeTextColor = [UIColor whiteColor]; // white text on dark bg
         }
     } else {
-        // "Default" and "Dark": Red background, white number (stock iOS)
+        // default & dark stock red badge
         useCustomBadge = NO;
     }
     
@@ -1711,7 +2026,7 @@ static void updateClockHandsInversionForView(UIView *view) {
         myLabel.hidden = NO;
         [view bringSubviewToFront:myLabel];
     } else {
-        // Stock iOS badge (Default & Dark)
+        // stock badge (default & dark)
         if (myBgView) {
             myBgView.hidden = YES;
         }
@@ -1779,7 +2094,7 @@ static void _26home_applyWidgetTintToView(UIView *view) {
         tintOverlay.layer.cornerCurve = kCACornerCurveContinuous;
         tintOverlay.clipsToBounds = YES;
         
-        // Parse tint color
+        // parse tint color
         NSString *tintHex = g_tintColor ?: @"#00FFFF";
         unsigned rgbValue = 0;
         NSScanner *scanner = [NSScanner scannerWithString:tintHex];
@@ -1983,16 +2298,46 @@ static void _26home_recursivelyApplyWidgetTint(UIView *view) {
 
 %hook SBHIconManager
 
+- (void)setEditing:(BOOL)editing withFeedbackBehavior:(id)behavior {
+    %orig;
+    g_isEditingMode = editing;
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"ngkhoi.26home.VisibilityStateChanged" object:nil];
+    notifyAllIconsVisibilityChanged();
+}
+
+- (void)setEditing:(BOOL)editing {
+    %orig;
+    g_isEditingMode = editing;
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"ngkhoi.26home.VisibilityStateChanged" object:nil];
+    notifyAllIconsVisibilityChanged();
+}
+
+- (void)folderControllerWillOpen:(id)folderController {
+    %orig;
+    g_isFolderOpen = YES;
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"ngkhoi.26home.FolderStateChanged" object:nil];
+    notifyAllIconsVisibilityChanged();
+}
+
+- (void)folderControllerDidClose:(id)folderController {
+    %orig;
+    g_isFolderOpen = NO;
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"ngkhoi.26home.FolderStateChanged" object:nil];
+    notifyAllIconsVisibilityChanged();
+}
+
 - (void)iconTapped:(id)iconView {
     %orig;
     
-    // We hide the glass for a short time to keep the launch animation smooth
+    // hide glass during app launch for smooth anim
     g_isAppOpening = YES;
-    [[NSNotificationCenter defaultCenter] postNotificationName:@"ngkhoi.26home.AppLaunchStateChanged" object:nil];
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"ngkhoi.26home.VisibilityStateChanged" object:nil];
+    notifyAllIconsVisibilityChanged();
     
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         g_isAppOpening = NO;
-        [[NSNotificationCenter defaultCenter] postNotificationName:@"ngkhoi.26home.AppLaunchStateChanged" object:nil];
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"ngkhoi.26home.VisibilityStateChanged" object:nil];
+        notifyAllIconsVisibilityChanged();
     });
 }
 
@@ -2104,7 +2449,17 @@ static void Home26TriggerGlobalRefresh(void) {
     }
     
     UIImage *baked = [GetIconGenerator() requestIconImageWithBackgroundForImage:orig bundleID:bundleID];
-    if (baked) return baked;
+    if (baked) {
+        if (orig.size.width > 0 && orig.size.height > 0 && !CGSizeEqualToSize(baked.size, orig.size)) {
+            CGFloat targetScale = orig.scale > 0 ? orig.scale : (scale > 0 ? scale : [UIScreen mainScreen].scale);
+            UIGraphicsBeginImageContextWithOptions(orig.size, NO, targetScale);
+            [baked drawInRect:CGRectMake(0, 0, orig.size.width, orig.size.height)];
+            UIImage *resized = UIGraphicsGetImageFromCurrentImageContext();
+            UIGraphicsEndImageContext();
+            if (resized) return resized;
+        }
+        return baked;
+    }
     
     return orig;
 }
@@ -2112,6 +2467,157 @@ static void Home26TriggerGlobalRefresh(void) {
 %end
 
 %end // End UIKitHooks
+
+%group SearchUIHooks
+
+%hook SearchUIAppIconImage
+
+- (void)loadImageWithScale:(double)scale isDarkStyle:(BOOL)isDark completionHandler:(void (^)(UIImage *))completionHandler {
+    NSString *style = g_iconStyle ?: @"Default";
+    if ([style isEqualToString:@"Default"] || !completionHandler) {
+        %orig(scale, isDark, completionHandler);
+        return;
+    }
+    
+    NSString *bundleID = nil;
+    if ([self respondsToSelector:@selector(bundleIdentifier)]) {
+        bundleID = [self bundleIdentifier];
+    }
+    
+    if (!bundleID || isAppExcluded(bundleID)) {
+        %orig(scale, isDark, completionHandler);
+        return;
+    }
+    
+    NSString *capturedBundleID = bundleID;
+    void (^completionWrapper)(UIImage *) = ^(UIImage *origImage) {
+        if (origImage && [origImage isKindOfClass:[UIImage class]]) {
+            UIImage *styled = [GetIconGenerator() requestIconImageWithBackgroundForImage:origImage bundleID:capturedBundleID];
+            if (styled) {
+                if (origImage.size.width > 0 && origImage.size.height > 0 && !CGSizeEqualToSize(styled.size, origImage.size)) {
+                    CGFloat targetScale = origImage.scale > 0 ? origImage.scale : (scale > 0 ? scale : [UIScreen mainScreen].scale);
+                    UIGraphicsBeginImageContextWithOptions(origImage.size, NO, targetScale);
+                    [styled drawInRect:CGRectMake(0, 0, origImage.size.width, origImage.size.height)];
+                    UIImage *resized = UIGraphicsGetImageFromCurrentImageContext();
+                    UIGraphicsEndImageContext();
+                    if (resized) {
+                        completionHandler(resized);
+                        return;
+                    }
+                }
+                completionHandler(styled);
+                return;
+            }
+        }
+        completionHandler(origImage);
+    };
+    %orig(scale, isDark, completionWrapper);
+}
+
+- (id)loadImageWithScale:(double)scale isDarkStyle:(BOOL)isDarkStyle {
+    UIImage *orig = %orig;
+    if (!orig || ![orig isKindOfClass:[UIImage class]]) return orig;
+    
+    NSString *style = g_iconStyle ?: @"Default";
+    if ([style isEqualToString:@"Default"]) {
+        return orig;
+    }
+    
+    NSString *bundleID = nil;
+    if ([self respondsToSelector:@selector(bundleIdentifier)]) {
+        bundleID = [self bundleIdentifier];
+    }
+    
+    if (!bundleID || isAppExcluded(bundleID)) {
+        return orig;
+    }
+    
+    UIImage *styled = [GetIconGenerator() requestIconImageWithBackgroundForImage:orig bundleID:bundleID];
+    if (styled) {
+        if (orig.size.width > 0 && orig.size.height > 0 && !CGSizeEqualToSize(styled.size, orig.size)) {
+            CGFloat targetScale = orig.scale > 0 ? orig.scale : (scale > 0 ? scale : [UIScreen mainScreen].scale);
+            UIGraphicsBeginImageContextWithOptions(orig.size, NO, targetScale);
+            [styled drawInRect:CGRectMake(0, 0, orig.size.width, orig.size.height)];
+            UIImage *resized = UIGraphicsGetImageFromCurrentImageContext();
+            UIGraphicsEndImageContext();
+            if (resized) return resized;
+        }
+        return styled;
+    }
+    return orig;
+}
+
+- (id)generateImageWithFormat:(int)format scale:(double)scale {
+    UIImage *orig = %orig;
+    if (!orig || ![orig isKindOfClass:[UIImage class]]) return orig;
+    
+    NSString *style = g_iconStyle ?: @"Default";
+    if ([style isEqualToString:@"Default"]) {
+        return orig;
+    }
+    
+    NSString *bundleID = nil;
+    if ([self respondsToSelector:@selector(bundleIdentifier)]) {
+        bundleID = [self bundleIdentifier];
+    }
+    
+    if (!bundleID || isAppExcluded(bundleID)) {
+        return orig;
+    }
+    
+    UIImage *styled = [GetIconGenerator() requestIconImageWithBackgroundForImage:orig bundleID:bundleID];
+    if (styled) {
+        if (orig.size.width > 0 && orig.size.height > 0 && !CGSizeEqualToSize(styled.size, orig.size)) {
+            CGFloat targetScale = orig.scale > 0 ? orig.scale : (scale > 0 ? scale : [UIScreen mainScreen].scale);
+            UIGraphicsBeginImageContextWithOptions(orig.size, NO, targetScale);
+            [styled drawInRect:CGRectMake(0, 0, orig.size.width, orig.size.height)];
+            UIImage *resized = UIGraphicsGetImageFromCurrentImageContext();
+            UIGraphicsEndImageContext();
+            if (resized) return resized;
+        }
+        return styled;
+    }
+    return orig;
+}
+
+%end
+
+%hook SearchUIImage
+
+- (UIImage *)uiImage {
+    UIImage *orig = %orig;
+    if (!orig || ![orig isKindOfClass:[UIImage class]]) return orig;
+    
+    NSString *style = g_iconStyle ?: @"Default";
+    if ([style isEqualToString:@"Default"]) {
+        return orig;
+    }
+    
+    NSString *bundleID = nil;
+    if ([self respondsToSelector:@selector(bundleIdentifier)]) {
+        bundleID = [(id)self performSelector:@selector(bundleIdentifier)];
+    }
+    
+    if (bundleID && !isAppExcluded(bundleID)) {
+        UIImage *styled = [GetIconGenerator() requestIconImageWithBackgroundForImage:orig bundleID:bundleID];
+        if (styled) {
+            if (orig.size.width > 0 && orig.size.height > 0 && !CGSizeEqualToSize(styled.size, orig.size)) {
+                CGFloat targetScale = orig.scale > 0 ? orig.scale : [UIScreen mainScreen].scale;
+                UIGraphicsBeginImageContextWithOptions(orig.size, NO, targetScale);
+                [styled drawInRect:CGRectMake(0, 0, orig.size.width, orig.size.height)];
+                UIImage *resized = UIGraphicsGetImageFromCurrentImageContext();
+                UIGraphicsEndImageContext();
+                if (resized) return resized;
+            }
+            return styled;
+        }
+    }
+    return orig;
+}
+
+%end
+
+%end // End SearchUIHooks
 
 %ctor {
     reload26HomePrefs();
@@ -2124,7 +2630,13 @@ static void Home26TriggerGlobalRefresh(void) {
     NSString *bundleId = [[NSBundle mainBundle] bundleIdentifier];
     BOOL isSpringBoard = [bundleId isEqualToString:@"com.apple.springboard"];
     
-    %init(UIKitHooks);
+        %init(UIKitHooks);
+    if (objc_getClass("SearchUIAppIconImage") || objc_getClass("SearchUIImage")) {
+        %init(SearchUIHooks);
+    }
+    if (objc_getClass("SBIconImageView")) {
+        %init(IconImageViewHooks);
+    }
     
     if (isSpringBoard) {
         %init(SpringBoardHooks);
@@ -2178,7 +2690,7 @@ static void Home26TriggerGlobalRefresh(void) {
                 iconManager = iconController;
             }
             
-            // 1. Purge regular icon image cache
+            // purge regular icon cache
             if ([iconManager respondsToSelector:@selector(iconImageCache)]) {
                 id iconCache = [iconManager performSelector:@selector(iconImageCache)];
                 if ([iconCache respondsToSelector:@selector(purgeAllCachedImages)]) {
@@ -2187,7 +2699,7 @@ static void Home26TriggerGlobalRefresh(void) {
                 }
             }
             
-            // 2. Wipe folder image cache internal maps
+            // wipe folder image cache maps
             if ([iconManager respondsToSelector:@selector(folderIconImageCache)]) {
                 id folderCache = [iconManager performSelector:@selector(folderIconImageCache)];
                 Home26Log(@"Found folderIconImageCache: %p", folderCache);
@@ -2210,7 +2722,7 @@ static void Home26TriggerGlobalRefresh(void) {
                         Home26Log(@"Exception clearing folder cache ivars: %@", e);
                     }
                     
-                    // 3. Enumerate all icon views and find folder icons
+                    // enumerate icon views and rebuild folder icons
                     if ([iconManager respondsToSelector:@selector(enumerateKnownIconViewsUsingBlock:)]) {
                         void (*enumerate)(id, SEL, void (^)(id)) = (void (*)(id, SEL, void (^)(id)))[iconManager methodForSelector:@selector(enumerateKnownIconViewsUsingBlock:)];
                         enumerate(iconManager, @selector(enumerateKnownIconViewsUsingBlock:), ^(UIView *iconView) {
@@ -2251,7 +2763,7 @@ static void Home26TriggerGlobalRefresh(void) {
         reload26HomePrefs();
     }];
     
-    // Register Darwin notifications for cross-process communication from Settings app
+    // sync prefs changes via darwin notify
     int clearToken;
     notify_register_dispatch("ngkhoi.26home.clearCache", &clearToken, dispatch_get_main_queue(), ^(int token) {
         Home26Log(@"=== Darwin clearCache Notification Received ===");
@@ -2277,7 +2789,7 @@ static void Home26TriggerGlobalRefresh(void) {
         refreshKnownIcons();
     });
     
-    // Register Darwin notification for system dark mode toggle (Control Center / Settings)
+    // auto theme switch on dark mode toggle
     int darkToken;
     notify_register_dispatch("AppleInterfaceThemeChangedNotification", &darkToken, dispatch_get_main_queue(), ^(int token) {
         NSString *style = g_iconStyle ?: @"Default";
@@ -2297,6 +2809,12 @@ static void Home26TriggerGlobalRefresh(void) {
         }
     });
     } else {
+        int clearToken;
+        notify_register_dispatch("ngkhoi.26home.clearCache", &clearToken, dispatch_get_main_queue(), ^(int token) {
+            reload26HomePrefs();
+            [GetIconGenerator() clearDiskCache];
+        });
+
         int styleToken;
         notify_register_dispatch("ngkhoi.26home.UpdateIconStyle", &styleToken, dispatch_get_main_queue(), ^(int token) {
             reload26HomePrefs();

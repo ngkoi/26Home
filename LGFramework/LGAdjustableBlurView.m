@@ -1,4 +1,6 @@
-#import "Headers.h"
+#import "LGAdjustableBlurView.h"
+#import <objc/runtime.h>
+#import <objc/message.h>
 
 @implementation LGAdjustableBlurView
 
@@ -14,12 +16,34 @@
     self.userInteractionEnabled = NO;
     self.backgroundColor = [UIColor clearColor];
     self.opaque = NO;
+    self.layer.cornerCurve = kCACornerCurveContinuous;
     [self applyFilters];
     return self;
 }
 
-- (void)didMoveToWindow { [super didMoveToWindow]; [self applyFilters]; }
-- (void)layoutSubviews  { [super layoutSubviews];  [self applyFilters]; }
+- (void)setCornerRadius:(CGFloat)cornerRadius {
+    _cornerRadius = cornerRadius;
+    self.layer.cornerRadius = cornerRadius;
+    self.layer.cornerCurve = kCACornerCurveContinuous;
+    self.layer.masksToBounds = YES;
+}
+
+- (void)didMoveToWindow {
+    [super didMoveToWindow];
+    [self applyFilters];
+}
+
+- (void)layoutSubviews {
+    [super layoutSubviews];
+    [self applyFilters];
+}
+
+- (void)setBlurRadius:(CGFloat)blurRadius {
+    if (fabs(_blurRadius - blurRadius) > 0.01) {
+        _blurRadius = blurRadius;
+        [self applyFilters];
+    }
+}
 
 - (void)applyFilters {
     CALayer *layer = self.layer;
@@ -27,14 +51,14 @@
     if (!backdropCls || ![layer isKindOfClass:backdropCls]) return;
 
     @try {
-        [layer setValue:@NO  forKey:@"layerUsesCoreImageFilters"];
+        [layer setValue:@NO forKey:@"layerUsesCoreImageFilters"];
         [layer setValue:@(!self.capturesAppIcon) forKey:@"windowServerAware"];
         if (self.capturesAppIcon) {
             [layer setValue:[NSString stringWithFormat:@"dylv.liquidglass.blur.%p", self] forKey:@"groupName"];
         }
         [layer setValue:@(self.qualityScale) forKey:@"scale"];
 
-        // skip if filter set with same radius, avoids oom
+        // Idempotent guard: skip if already configured with this radius to prevent surface allocation loops / OOM
         NSArray *existing = layer.filters;
         if (existing.count == 1) {
             NSString *type = nil;
@@ -61,4 +85,5 @@
     } @catch (NSException *e) {
     }
 }
+
 @end

@@ -43,12 +43,12 @@
     [super viewDidLoad];
     self.title = @"Exception List";
     
-    // Load current excluded apps
+    // load excluded apps dict
     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.ngkhoi.26home"];
     NSDictionary *stored = [defaults dictionaryForKey:@"ngkhoi.26home.excludedApps"];
     self.excludedApps = stored ? [stored mutableCopy] : [NSMutableDictionary dictionary];
     
-    // Setup TableView
+    // tableview setup
     self.tableView = [[UITableView alloc] initWithFrame:self.view.bounds style:UITableViewStyleInsetGrouped];
     self.tableView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     self.tableView.dataSource = self;
@@ -56,7 +56,7 @@
     self.tableView.rowHeight = 56.0;
     [self.view addSubview:self.tableView];
     
-    // Setup SearchController
+    // search controller
     self.searchController = [[UISearchController alloc] initWithSearchResultsController:nil];
     self.searchController.searchResultsUpdater = self;
     self.searchController.obscuresBackgroundDuringPresentation = NO;
@@ -65,7 +65,7 @@
     self.navigationItem.hidesSearchBarWhenScrolling = NO;
     self.definesPresentationContext = YES;
     
-    // Setup Reset/Actions item
+    // reset / actions button
     UIBarButtonItem *resetBtn = [[UIBarButtonItem alloc] initWithTitle:@"Reset All" style:UIBarButtonItemStylePlain target:self action:@selector(resetAll:)];
     self.navigationItem.rightBarButtonItem = resetBtn;
     
@@ -100,7 +100,7 @@
                 model.bundleID = bid;
                 model.name = name;
                 
-                // Get app icon (29x29 format 0)
+                // app icon (29x29 format 0)
                 if ([UIImage respondsToSelector:@selector(_applicationIconImageForBundleIdentifier:format:scale:)]) {
                     model.icon = [UIImage _applicationIconImageForBundleIdentifier:bid format:0 scale:[UIScreen mainScreen].scale];
                 }
@@ -109,7 +109,7 @@
             }
         }
         
-        // Sort alphabetically by name
+        // sort by display name
         [appsList sortUsingComparator:^NSComparisonResult(Home26AppModel *a, Home26AppModel *b) {
             return [a.name localizedCaseInsensitiveCompare:b.name];
         }];
@@ -145,7 +145,7 @@
     CFPreferencesSetAppValue(CFSTR("ngkhoi.26home.excludedApps"), (__bridge CFPropertyListRef)self.excludedApps, CFSTR("com.ngkhoi.26home"));
     CFPreferencesAppSynchronize(CFSTR("com.ngkhoi.26home"));
     
-    // Notify tweak
+    // notify tweak
     notify_post("ngkhoi.26home.clearCache");
     notify_post("ngkhoi.26home.UpdateIconStyle");
 }

@@ -23,7 +23,7 @@ extern NSString *g_menuAppearance;
 #define kLightClearRimTopOpacity 1
 #define kLightClearRimBottomOpacity 1
 
-// Dedicated configuration for Tinted Dark
+// tinted dark config
 #define kDarkTintedTopOpacity 0.55
 #define kDarkTintedBottomOpacity 0.03
 #define kDarkTintedStrokeOpacity 0.2
@@ -89,7 +89,7 @@ extern NSString *g_menuAppearance;
         self.directoryIndexCache = indexCache;
         self.themePathsCache = pathsCache;
         
-        // Listen to Settings app cache clear notification
+        // settings clear cache notify
         int out_token;
         notify_register_dispatch("ngkhoi.26home.clearCache", &out_token, dispatch_get_main_queue(), ^(int token) {
             [self clearDiskCache];
@@ -104,7 +104,7 @@ extern NSString *g_menuAppearance;
 
 - (void)saveOriginalImage:(UIImage *)image forBundleID:(NSString *)bundleID {
     if ([bundleID isEqualToString:@"com.apple.mobiletimer"] || [bundleID isEqualToString:@"com.apple.mobilecal"]) {
-        return; // NEVER cache dynamic icons
+        return; // skip dynamic icons (clock, cal)
     }
     if (image && bundleID) {
         @synchronized (self.originalImages) {
@@ -115,7 +115,7 @@ extern NSString *g_menuAppearance;
 
 - (UIImage *)originalImageForBundleID:(NSString *)bundleID {
     if ([bundleID isEqualToString:@"com.apple.mobiletimer"] || [bundleID isEqualToString:@"com.apple.mobilecal"]) {
-        return nil; // NEVER return cached snapshot for dynamic icons
+        return nil; // skip cached snapshot for live icons
     }
     if (!bundleID) return nil;
     @synchronized (self.originalImages) {
@@ -150,23 +150,24 @@ extern NSString *g_menuAppearance;
     [path addClip];
     [image drawAtPoint:CGPointZero];
     
-    [path setLineWidth:5.0];
-    [[UIColor colorWithWhite:1.0 alpha:0.20] setStroke];
+    CGFloat rimWidth = 6.0;
+    [path setLineWidth:rimWidth];
+    [[UIColor colorWithWhite:1.0 alpha:0.28] setStroke];
     [path stroke];
     
     CGContextSaveGState(context);
-    CGContextSetLineWidth(context, 5.0);
+    CGContextSetLineWidth(context, rimWidth);
     CGContextAddPath(context, path.CGPath);
     CGContextReplacePathWithStrokedPath(context);
     CGContextClip(context);
 
     CGColorSpaceRef rimColorSpace = CGColorSpaceCreateDeviceRGB();
-    NSArray *rimColors = @[(id)[UIColor colorWithWhite:1.0 alpha:0.75].CGColor,
+    NSArray *rimColors = @[(id)[UIColor colorWithWhite:1.0 alpha:0.92].CGColor,
                            (id)[UIColor colorWithWhite:1.0 alpha:0.0].CGColor,
                            (id)[UIColor colorWithWhite:1.0 alpha:0.0].CGColor,
-                           (id)[UIColor colorWithWhite:1.0 alpha:0.35].CGColor];
+                           (id)[UIColor colorWithWhite:1.0 alpha:0.48].CGColor];
     
-    CGFloat rimLocations[] = {0.0, 0.35, 0.65, 1.0};
+    CGFloat rimLocations[] = {0.0, 0.38, 0.62, 1.0};
     CGGradientRef rimGradient = CGGradientCreateWithColors(rimColorSpace, (__bridge CFArrayRef)rimColors, rimLocations);
     
     CGPoint rimStart = CGPointMake(0, 0);
@@ -221,8 +222,7 @@ extern NSString *g_menuAppearance;
     
     NSArray *suffixes = @[@"-large.png", @".png"];
     
-    // Special case for Clock: ALWAYS load ClockIconBackgroundSquare (dial background without hands),
-    // NEVER load com.apple.mobiletimer-large.png (which contains static baked-in hands).
+    // clock dial bg only, hands drawn at runtime
         if ([bundleID isEqualToString:@"com.apple.mobiletimer"]) {
         for (NSString *suffix in suffixes) {
             NSString *filename = [@"ClockIconBackgroundSquare" stringByAppendingString:suffix];
@@ -264,15 +264,15 @@ extern NSString *g_menuAppearance;
     CGFloat h, s, b, a;
     [rawColor getHue:&h saturation:&s brightness:&b alpha:&a];
     
-    // Tame saturation so icons are refined and never harsh / pure neon
+    // clamp sat so icons stay clean
     s = s * 0.70;
     
-    // Control brightness based on theme mode to prevent washout and ensure strong readability
+    // clamp brightness per theme
     if (isDarkTheme) {
         b = MIN(b * 0.85, 0.85);
         b = MAX(b, 0.20);
     } else {
-        // Light mode: clamp brightness to 0.70 so white glyphs pop and white tint becomes a sleek silver/slate
+        // clamp light mode brightness so white glyphs pop
         b = MIN(b * 0.70, 0.70);
         b = MAX(b, 0.20);
     }
@@ -320,7 +320,7 @@ extern NSString *g_menuAppearance;
 }
 
 - (UIImage *)generateDynamicIconForBundleID:(NSString *)bundleID style:(NSString *)style isDarkTheme:(BOOL)isDarkTheme {
-    // 1. Resolve theme directory name
+    // resolve theme dir
     NSString *themeName = @"Light";
     if ([style isEqualToString:@"Dark"]) {
         themeName = isDarkTheme ? @"Dark" : @"Light";
@@ -336,15 +336,15 @@ extern NSString *g_menuAppearance;
         }
     }
     
-    // 2. Fetch premade asset
+    // fetch premade png
     UIImage *baseImage = [self _premadeIconForBundleID:bundleID style:themeName];
     if (!baseImage) {
-        // Fallback to Light or Dark if specific asset is missing
+        // fallback to light/dark if missing
         baseImage = [self _premadeIconForBundleID:bundleID style:isDarkTheme ? @"Dark" : @"Light"];
     }
     if (!baseImage) return nil;
     
-    // 3. If Calendar, draw Day of Week and Date Number
+    // live calendar date & day
     UIImage *renderedImage = baseImage;
     if ([bundleID isEqualToString:@"com.apple.mobilecal"]) {
         UIGraphicsBeginImageContextWithOptions(baseImage.size, NO, baseImage.scale);
@@ -353,7 +353,7 @@ extern NSString *g_menuAppearance;
         NSDate *date = [NSDate date];
         NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
         
-        // Draw Day of Week (e.g., FRIDAY)
+        // day of week string
         [formatter setDateFormat:@"EEEE"];
         NSString *dayString = [[formatter stringFromDate:date] uppercaseString];
         UIColor *dayColor = [UIColor systemRedColor];
@@ -363,7 +363,7 @@ extern NSString *g_menuAppearance;
         [dayString drawInRect:CGRectMake(0, baseImage.size.height * 0.15, baseImage.size.width, baseImage.size.height * 0.2)
                withAttributes:@{NSFontAttributeName: dayFont, NSForegroundColorAttributeName: dayColor, NSParagraphStyleAttributeName: paragraphStyle}];
         
-        // Draw Date (e.g., 14)
+        // day number string
         [formatter setDateFormat:@"d"];
         NSString *dateString = [formatter stringFromDate:date];
         UIColor *dateColor = [UIColor blackColor];
@@ -378,21 +378,21 @@ extern NSString *g_menuAppearance;
         UIGraphicsEndImageContext();
     }
     
-    // 4. Return directly for Default & Dark, but apply specular overlay
+    // default & dark with specular
     if ([style isEqualToString:@"Default"] || [style isEqualToString:@"Dark"]) {
-        // Dynamic icons (Calendar, Clock): skip the specular rim — its faint stroke is visible on their flat faces
+        // skip specular for live icons
         if ([bundleID isEqualToString:@"com.apple.mobilecal"] || [bundleID isEqualToString:@"com.apple.mobiletimer"]) {
             return renderedImage;
         }
         return [self applySpecularHighlightToImage:renderedImage];
     }
     
-    // 5. For Clear or Tinted: apply glass refraction/specular shimmer
+    // clear / tinted refraction & rims
     UIColor *tintColor = [self adjustedTintColorFromHex:g_tintColor isDarkTheme:isDarkTheme];
     UIImage *styled = [self compositeGlyph:renderedImage withBackgroundStyle:style isDarkTheme:isDarkTheme tintColor:tintColor isAutoGenerated:YES drawSpecular:NO];
     if (!styled) styled = renderedImage;
     
-    // 6. For Tinted Dark only: apply color tint overlay
+    // tinted dark color overlay
     if ([style isEqualToString:@"Tinted"] && isDarkTheme && styled) {
         UIGraphicsBeginImageContextWithOptions(styled.size, NO, styled.scale);
         UIBezierPath *path = [UIBezierPath bezierPathWithRoundedRect:CGRectMake(0, 0, styled.size.width, styled.size.height) cornerRadius:styled.size.width * 0.225];
@@ -432,13 +432,13 @@ extern NSString *g_menuAppearance;
         return [self generateDynamicIconForBundleID:bundleID style:style isDarkTheme:isDarkTheme];
     }
     
-    // 1. Direct premade icon check for Clear style
+    // direct premade check for clear style
     if ([style isEqualToString:@"Clear"]) {
         UIImage *premade = [self _premadeIconForBundleID:bundleID style:isDarkTheme ? @"ClearDark" : @"ClearLight"];
         if (premade) return premade;
     }
     
-    // Base image setup based on style
+    // base img setup per style
     UIImage *baseOrig = orig;
     if ([style isEqualToString:@"Clear"] || [style isEqualToString:@"Tinted"]) {
         UIImage *premadeDark = [self _premadeIconForBundleID:bundleID style:@"Dark"];
@@ -477,7 +477,7 @@ extern NSString *g_menuAppearance;
         }
         
         if (styled) {
-            // Guarantee rounded corners for all icons to fix live icons (like Clock) spilling out
+            // clip rounded corners for live icons
             UIGraphicsBeginImageContextWithOptions(styled.size, NO, styled.scale);
             UIBezierPath *path = [UIBezierPath bezierPathWithRoundedRect:CGRectMake(0, 0, styled.size.width, styled.size.height) cornerRadius:styled.size.width * 0.225];
             [path addClip];
@@ -549,14 +549,14 @@ extern NSString *g_menuAppearance;
     
     UIGraphicsBeginImageContextWithOptions(glyph.size, NO, glyph.scale);
     
-    // Draw background
-    UIBezierPath *path = [UIBezierPath bezierPathWithRoundedRect:CGRectMake(0, 0, glyph.size.width, glyph.size.height) cornerRadius:glyph.size.width * 0.225]; // Apple's continuous corner radius ratio
+    // draw bg
+    UIBezierPath *path = [UIBezierPath bezierPathWithRoundedRect:CGRectMake(0, 0, glyph.size.width, glyph.size.height) cornerRadius:glyph.size.width * 0.225]; // squircle radius ratio (0.225)
     [path addClip];
     
     CGContextRef context = UIGraphicsGetCurrentContext();
     
     if ([style isEqualToString:@"Tinted"] && !isDarkTheme) {
-        // --- TINTED LIGHT: Clear translucent dark glass base (0.16 alpha) + light colored glass gradient ---
+        // tinted light base glass + colored gradient
         [[UIColor colorWithWhite:0.0 alpha:0.16] setFill];
         [path fill];
         
@@ -578,12 +578,12 @@ extern NSString *g_menuAppearance;
         CGGradientRelease(gradient);
         CGColorSpaceRelease(colorSpace);
         
-        // Glass border with tint
+        // tinted glass border
         [path setLineWidth:1.2];
         [[tintColor colorWithAlphaComponent:strokeOpacity] setStroke];
         [path stroke];
         
-        // Specular white rims on top-left and bottom-right
+        // specular rims top-left / bot-right
         if (drawSpecular) {
             CGContextSaveGState(context);
             [path setLineWidth:1.2];
@@ -650,7 +650,7 @@ extern NSString *g_menuAppearance;
             rimBotOpacity = kLightClearRimBottomOpacity;
         }
         
-        // Draw glassy gradient
+        // glass gradient
         CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
         NSArray *colors = @[(id)[UIColor colorWithWhite:1.0 alpha:topOpacity].CGColor,
                             (id)[UIColor colorWithWhite:1.0 alpha:botOpacity].CGColor];
@@ -666,13 +666,13 @@ extern NSString *g_menuAppearance;
         CGGradientRelease(gradient);
         CGColorSpaceRelease(colorSpace);
         
-        // Add a subtle glass border
+        // subtle glass border
         [path setLineWidth:1.5];
         [[UIColor colorWithWhite:1.0 alpha:strokeOpacity] setStroke];
         [path stroke];
         
         if (drawSpecular && ![g_menuAppearance isEqualToString:@"iOS18"] && isAutoGenerated) {
-            // Add specular rims (highlighted top-left & bottom-right border)
+            // specular rims
             CGContextSaveGState(context);
             [path setLineWidth:1.5];
             CGContextAddPath(context, path.CGPath);
@@ -707,13 +707,13 @@ extern NSString *g_menuAppearance;
         [path fill];
     }
     
-    // Apply dimming layer specifically to the background only before the glyph is drawn on top for Tinted Dark
+    // dimming bg for tinted dark
     if ([style isEqualToString:@"Tinted"] && isDarkTheme) {
         [[UIColor colorWithWhite:0.0 alpha:0.40] setFill];
         [path fill];
     }
     
-    // Draw glyph with subtle drop shadow for depth (glyph stays pure white in Tinted Light!)
+    // draw glyph with subtle shadow
     CGContextSaveGState(context);
     if ([style isEqualToString:@"Clear"] || [style isEqualToString:@"Tinted"]) {
         CGContextSetShadowWithColor(context, CGSizeMake(0, 2), 4.0, [UIColor colorWithWhite:0.0 alpha:0.3].CGColor);
@@ -721,7 +721,7 @@ extern NSString *g_menuAppearance;
     [glyph drawInRect:CGRectMake(0, 0, glyph.size.width, glyph.size.height)];
     CGContextRestoreGState(context);
     
-    // Draw specular rims ON TOP for Default and Dark (since their glyphs are opaque and would cover background rims)
+    // draw specular rims on top for opaque glyphs
     if (drawSpecular && ![g_menuAppearance isEqualToString:@"iOS18"] && ([style isEqualToString:@"Default"] || [style isEqualToString:@"Dark"]) && isAutoGenerated) {
         CGContextSaveGState(context);
         [path setLineWidth:1.5];
@@ -771,7 +771,7 @@ extern NSString *g_menuAppearance;
         return [self generateDynamicIconForBundleID:bundleID style:effectiveStyle isDarkTheme:isDarkTheme];
     }
     
-    // 1. Direct premade icon check for Clear style
+    // direct premade check for clear style
     if ([effectiveStyle isEqualToString:@"Clear"]) {
         UIImage *premade = [self _premadeIconForBundleID:bundleID style:@"ClearLight"];
         if (premade) return premade;
@@ -782,8 +782,7 @@ extern NSString *g_menuAppearance;
         tintHex = g_tintColor ?: @"#00FFFF";
     }
     
-    // NS premades (DefaultNS/DarkNS): dark/light icons without baked specular — they flow through
-    // the generated path so compositeGlyph applies the standard rim treatment
+    // ns premades skip baked specular, apply runtime rim
     UIImage *nsPremade = nil;
     if ([effectiveStyle isEqualToString:@"Dark"]) {
         nsPremade = [self _premadeIconForBundleID:bundleID style:@"DarkNS"];
@@ -792,7 +791,7 @@ extern NSString *g_menuAppearance;
     }
     
     BOOL disableGrad = [[[NSUserDefaults alloc] initWithSuiteName:@"com.ngkhoi.26home"] boolForKey:@"ngkhoi.26home.disableDarkTintGradient"];
-    NSString *cacheKey = [NSString stringWithFormat:@"%@_%@_v41_bg_%@_%@_%@_%d%@", bundleID, effectiveStyle, isDarkTheme ? @"dark" : @"light", tintHex, g_menuAppearance, disableGrad, nsPremade ? @"_ns2" : @""];
+    NSString *cacheKey = [NSString stringWithFormat:@"%@_%@_v41_bg_%@_%@_%@_%d%@", bundleID, effectiveStyle, isDarkTheme ? @"dark" : @"light", tintHex, g_menuAppearance, disableGrad, nsPremade ? @"_ns4" : @""];
     
     UIImage *memCached = [self.memoryCache objectForKey:cacheKey];
     if (memCached) {
@@ -845,7 +844,7 @@ extern NSString *g_menuAppearance;
         } else {
             UIImage *premadeDark = [self _premadeIconForBundleID:bundleID style:@"Dark"];
             if (premadeDark) {
-                return premadeDark; // Premade dark icon is already fully rendered and complete
+                return premadeDark;
             } else {
                 glyph = [self generateDarkIconForImage:orig bundleID:bundleID];
                 isAutoGenerated = YES;
@@ -858,7 +857,7 @@ extern NSString *g_menuAppearance;
         } else {
             UIImage *premadeLight = [self _premadeIconForBundleID:bundleID style:@"Light"];
             if (premadeLight) {
-                return premadeLight; // Premade light icon is already fully rendered and complete
+                return premadeLight;
             } else {
                 glyph = orig;
                 isAutoGenerated = YES;
@@ -867,28 +866,27 @@ extern NSString *g_menuAppearance;
     }
     
     UIColor *tintColor = [self adjustedTintColorFromHex:tintHex isDarkTheme:isDarkTheme];
-    // NS premades get the stronger 3pt rim (applySpecularHighlightToImage) instead of the standard 1.5pt,
-    // so the generator specular reads clearly over their crisp premade edges
+    // ns premades get 3pt rim for crisp edges
     UIImage *styled = [self compositeGlyph:glyph withBackgroundStyle:effectiveStyle isDarkTheme:isDarkTheme tintColor:tintColor isAutoGenerated:isAutoGenerated drawSpecular:!nsPremade];
     if (styled && nsPremade) {
         styled = [self applySpecularHighlightToImage:styled];
     }
     
-    // Tint overlay is ONLY applied to Tinted Dark (Tinted Light background is already tinted glass and glyph stays white)
+    // tint overlay on tinted dark
     if ([effectiveStyle isEqualToString:@"Tinted"] && isDarkTheme && styled) {
         UIGraphicsBeginImageContextWithOptions(styled.size, NO, styled.scale);
         
         UIBezierPath *path = [UIBezierPath bezierPathWithRoundedRect:CGRectMake(0, 0, styled.size.width, styled.size.height) cornerRadius:styled.size.width * 0.225];
         [path addClip];
         
-        // 1. Fill solid tint color
+        // solid tint fill
         [tintColor setFill];
         UIRectFill(CGRectMake(0, 0, styled.size.width, styled.size.height));
         
-        // 2. Apply luminosity (details) from original styled image
+        // luminosity blend
         [styled drawInRect:CGRectMake(0, 0, styled.size.width, styled.size.height) blendMode:kCGBlendModeLuminosity alpha:1.0];
         
-        // 3. Mask out the original alpha channel (so transparent backgrounds stay transparent)
+        // mask orig alpha channel
         [styled drawInRect:CGRectMake(0, 0, styled.size.width, styled.size.height) blendMode:kCGBlendModeDestinationIn alpha:1.0];
         
         styled = UIGraphicsGetImageFromCurrentImageContext();
@@ -905,10 +903,6 @@ extern NSString *g_menuAppearance;
     
     return styled;
 }
-
-// ---------------------------------------------------------
-// IMAGE PROCESSING LOGIC
-// ---------------------------------------------------------
 
 typedef struct {
     CGFloat r, g, b, brightness, saturation;
@@ -1045,14 +1039,13 @@ typedef struct {
             
             CGFloat dist = sqrt(dr*dr + dg*dg + db*db);
             
-            // Smooth anti-aliased distance calculation
             CGFloat t0 = 0.03;
             CGFloat t1 = 0.18;
             CGFloat factor = 0.0;
             if (dist > t0) {
                 CGFloat t = (dist - t0) / (t1 - t0);
                 if (t > 1.0) t = 1.0;
-                factor = t * t * (3.0 - 2.0 * t); // Smoothstep curve for smooth anti-aliased edge
+                factor = t * t * (3.0 - 2.0 * t); 
             }
             
             if (!bg.isWhite) {
@@ -1090,7 +1083,7 @@ typedef struct {
         *outFgIsColorful = (fgCount > 0) && ((CGFloat)colorfulCount / fgCount) > 0.08;
     }
     
-    // 3x3 anti-aliasing filter to eliminate jagged staircase artifacts on high-DPI displays
+    // 3x3 anti-aliasing 
     unsigned char *smoothMask = (unsigned char *)malloc(height * width);
     for (int y = 0; y < (int)height; y++) {
         for (int x = 0; x < (int)width; x++) {
@@ -1215,7 +1208,7 @@ typedef struct {
 }
 
 - (UIImage *)generateDarkIconForImage:(UIImage *)image bundleID:(NSString *)bundleID {
-    // Explicitly skip complex stock apps that cannot be procedurally processed
+    // explicitly skip complex stock apps that cannot be procedurally processed
     NSSet *skipApps = [NSSet setWithObjects:
                        @"com.apple.camera",
                        @"com.apple.mobilenotes",
@@ -1247,7 +1240,6 @@ typedef struct {
     UIImage *glyphImage;
     
     if (bg.isWhite || bg.saturation < 0.1) {
-        // ALWAYS invert black text on white backgrounds, regardless of whether the foreground is colorful (like Calendar red SUN)
         glyphImage = [self invertDarkGrayscaleInImage:image];
     } else if (fgIsColorful) {
         glyphImage = image;
@@ -1295,23 +1287,17 @@ typedef struct {
     CGContextTranslateCTM(ctx, 0, size.height);
     CGContextScaleCTM(ctx, 1.0, -1.0);
     
-    // 1. Clip to the extracted object mask
     CGContextClipToMask(ctx, CGRectMake(0, 0, size.width, size.height), mask);
     
-    // 2. Draw the object image to retain its details and 3D depth
     CGContextSetAlpha(ctx, 0.95);
     CGContextDrawImage(ctx, CGRectMake(0, 0, size.width, size.height), glyphImage.CGImage);
     
     CGContextSetAlpha(ctx, 1.0);
     
-    // 3. Desaturate the object completely
     [[UIColor blackColor] setFill];
     CGContextSetBlendMode(ctx, kCGBlendModeSaturation);
     CGContextFillRect(ctx, CGRectMake(0, 0, size.width, size.height));
     
-    // 4. Tint to frosted white/gray while preserving 3D depth
-    // The user requested to ALWAYS keep the object light/frosted, even in Dark mode,
-    // so it contrasts well against the dark glass background.
     [[UIColor colorWithWhite:0.75 alpha:1.0] setFill];
     CGContextSetBlendMode(ctx, kCGBlendModeScreen);
     CGContextFillRect(ctx, CGRectMake(0, 0, size.width, size.height));

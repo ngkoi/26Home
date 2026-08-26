@@ -68,6 +68,39 @@ static UIImage *LGCreateAutomaticWeatherImage(void) {
 
 @implementation HomeCustomizationMenuContainer18
 
+- (CGFloat)_bottomOffset {
+    if ([UIDevice currentDevice].userInterfaceIdiom == UIUserInterfaceIdiomPad) {
+        CGFloat dockHeight = 0.0;
+        if (NSClassFromString(@"SBIconController")) {
+            id iconController = nil;
+            if ([NSClassFromString(@"SBIconController") respondsToSelector:@selector(sharedInstance)]) {
+                iconController = [NSClassFromString(@"SBIconController") performSelector:@selector(sharedInstance)];
+            }
+            if (iconController && [iconController respondsToSelector:@selector(floatingDockController)]) {
+                id floatDockCtrl = [iconController performSelector:@selector(floatingDockController)];
+                if (floatDockCtrl && [floatDockCtrl respondsToSelector:@selector(floatingDockView)]) {
+                    UIView *dockView = [floatDockCtrl performSelector:@selector(floatingDockView)];
+                    if (dockView && dockView.window && !dockView.hidden) {
+                        CGRect dockFrame = [dockView convertRect:dockView.bounds toView:self];
+                        if (dockFrame.size.height > 0 && dockFrame.origin.y > 0) {
+                            dockHeight = self.bounds.size.height - dockFrame.origin.y;
+                        }
+                    }
+                }
+            }
+        }
+        if (dockHeight <= 0.0) {
+            dockHeight = 96.0;
+        }
+        return dockHeight + 14.0;
+    }
+    return 8.0;
+}
+
+- (CGFloat)_restingYForMenuHeight:(CGFloat)menuHeight {
+    return self.bounds.size.height - menuHeight - [self _bottomOffset];
+}
+
 - (instancetype)initWithFrame:(CGRect)frame {
     self = [super initWithFrame:frame];
     if (self) {
@@ -404,7 +437,7 @@ static UIImage *LGCreateAutomaticWeatherImage(void) {
         // Animate menu height
         CGRect menuFrame = self.menuView.frame;
         menuFrame.size.height = targetHeight;
-        menuFrame.origin.y = self.bounds.size.height - targetHeight - 8.0;
+        menuFrame.origin.y = [self _restingYForMenuHeight:targetHeight];
         self.menuView.frame = menuFrame;
     };
     
@@ -625,7 +658,7 @@ static UIImage *LGCreateAutomaticWeatherImage(void) {
 }
 
 - (void)handleMenuPull:(UIPanGestureRecognizer *)gesture {
-    CGFloat restingY = self.bounds.size.height - self.menuView.frame.size.height - 8.0;
+    CGFloat restingY = [self _restingYForMenuHeight:self.menuView.frame.size.height];
     CGPoint translation = [gesture translationInView:self];
     
     if (gesture.state == UIGestureRecognizerStateChanged) {
@@ -672,7 +705,7 @@ static UIImage *LGCreateAutomaticWeatherImage(void) {
     
     [UIView animateWithDuration:0.7 delay:0 usingSpringWithDamping:0.8 initialSpringVelocity:0.0 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionAllowUserInteraction animations:^{
         CGRect newFrame = self.menuView.frame;
-        newFrame.origin.y = self.bounds.size.height - newFrame.size.height - 8.0;
+        newFrame.origin.y = [self _restingYForMenuHeight:newFrame.size.height];
         self.menuView.frame = newFrame;
         self.menuView.alpha = 1.0;
     } completion:nil];

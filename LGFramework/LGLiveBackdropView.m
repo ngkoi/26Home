@@ -1,4 +1,6 @@
-#import "Headers.h"
+#import "LGLiveBackdropView.h"
+#import <objc/runtime.h>
+#import <objc/message.h>
 
 @implementation LGLiveBackdropView
 
@@ -13,12 +15,27 @@
     self.userInteractionEnabled = NO;
     self.backgroundColor = [UIColor clearColor];
     self.opaque = NO;
+    self.layer.cornerCurve = kCACornerCurveContinuous;
     [self applyFilters];
     return self;
 }
 
-- (void)didMoveToWindow { [super didMoveToWindow]; [self applyFilters]; }
-- (void)layoutSubviews  { [super layoutSubviews];  [self applyFilters]; }
+- (void)setCornerRadius:(CGFloat)cornerRadius {
+    _cornerRadius = cornerRadius;
+    self.layer.cornerRadius = cornerRadius;
+    self.layer.cornerCurve = kCACornerCurveContinuous;
+    self.layer.masksToBounds = YES;
+}
+
+- (void)didMoveToWindow {
+    [super didMoveToWindow];
+    [self applyFilters];
+}
+
+- (void)layoutSubviews {
+    [super layoutSubviews];
+    [self applyFilters];
+}
 
 - (void)applyFilters {
     CALayer *layer = self.layer;
@@ -26,20 +43,21 @@
     if (!backdropCls || ![layer isKindOfClass:backdropCls]) return;
 
     @try {
-        [layer setValue:@NO  forKey:@"layerUsesCoreImageFilters"];
+        [layer setValue:@NO forKey:@"layerUsesCoreImageFilters"];
         [layer setValue:@(!self.capturesAppIcon) forKey:@"windowServerAware"];
         
         if (self.capturesAppIcon) {
             [layer setValue:[NSString stringWithFormat:@"dylv.liquidglass.refract.%p", self] forKey:@"groupName"];
         } else {
-            if (![layer valueForKey:@"groupName"])
+            if (![layer valueForKey:@"groupName"]) {
                 [layer setValue:@"dylv.liquidglass.sharedGroup" forKey:@"groupName"];
+            }
         }
 
         [layer setValue:@"dylv.liquidglass" forKey:@"groupNamespace"];
         [layer setValue:@(self.qualityScale) forKey:@"scale"];
 
-        // skip if filter set, avoids oom from repeated alloc
+        // Idempotent guard: skip if already configured with this filter to prevent surface allocation loops / OOM
         NSArray *existing = layer.filters;
         if (existing.count == 1) {
             NSString *type = nil;

@@ -2,6 +2,7 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 #import <objc/message.h>
+#import "Obfuscation.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -91,6 +92,18 @@ struct SBIconImageInfo {
 @interface SBHIconManager : NSObject
 @end
 
+@interface SBHomeScreenViewController : UIViewController
+@end
+
+@interface SBFluidSwitcherViewController : UIViewController
+@end
+
+@interface CSCoverSheetViewController : UIViewController
+@end
+
+@interface SBFolderContainerView : UIView
+@end
+
 static inline __attribute__((unused)) UIViewController *getViewControllerForView(UIView *view) {
     UIResponder *responder = view;
     while ((responder = [responder nextResponder])) {
@@ -113,6 +126,10 @@ extern BOOL g_keepAppIconBlur;
 extern CGFloat g_appIconBlurRadius;
 extern BOOL g_isAppOpening;
 extern BOOL g_isFolderOpen;
+extern BOOL g_isHomeScreenVisible;
+extern BOOL g_isSwitcherOpen;
+extern BOOL g_isCoverSheetVisible;
+extern BOOL g_isEditingMode;
 extern void reload26HomePrefs(void);
 
 static inline UIImage *LGImageNamed(NSString *name) {
@@ -162,7 +179,7 @@ static inline UIImage *LGImageNamed(NSString *name) {
 @property (nonatomic, strong) NSMutableArray<UILabel *> *themeLabels;
 @property (nonatomic, strong) NSMutableArray<UIButton *> *themeButtons;
 
-// Tinted mode UI
+// tinted mode ui
 @property (nonatomic, strong) UIView *slidersContainer;
 @property (nonatomic, strong) UIView *hueSlider;
 @property (nonatomic, strong) UIView *hueThumb;
