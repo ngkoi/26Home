@@ -1,6 +1,7 @@
 #import "Home26ExceptionListController.h"
 #import <notify.h>
 #import <objc/runtime.h>
+#import "../LGDebugger.h"
 
 @interface UIImage (PrivateIcon)
 + (UIImage *)_applicationIconImageForBundleIdentifier:(NSString *)bundleID format:(int)format scale:(CGFloat)scale;
@@ -138,6 +139,7 @@
 }
 
 - (void)saveExcludedApps {
+    Home26Log(@"[User Action] Prefs - Updated excluded apps: %lu apps excluded", (unsigned long)self.excludedApps.count);
     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.ngkhoi.26home"];
     [defaults setObject:self.excludedApps forKey:@"ngkhoi.26home.excludedApps"];
     [defaults synchronize];

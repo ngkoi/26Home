@@ -11,6 +11,7 @@ static inline void Home26PostStyleUpdate(void) {
 
 static void save26Pref(NSString *key, id value) {
     if (!key) return;
+    Home26Log(@"[User Action] Preference '%@' updated to: %@", key, value);
     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.ngkhoi.26home"];
     if (value) {
         [defaults setObject:value forKey:key];
@@ -1458,7 +1459,7 @@ static inline __attribute__((unused)) UIImage *LGCreateScaleButtonImage(BOOL isL
             iconView.layer.cornerRadius = 16;
             iconView.clipsToBounds = YES;
             
-            NSString *basePath = @"/var/jb/Library/Application Support/26Home/SolidGlass";
+            NSString *basePath = jbroot(@"/Library/Application Support/26Home/SolidGlass");
             if (![[NSFileManager defaultManager] fileExistsAtPath:basePath]) {
                 basePath = @"/Library/Application Support/26Home/SolidGlass";
             }

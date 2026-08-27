@@ -38,113 +38,8 @@ BOOL isAppExcluded(NSString *bundleID) {
     
     return YES;
 }
-@interface _26HomeDimmingViewController : UIViewController
-@end
 
-@implementation _26HomeDimmingViewController
 
-- (BOOL)shouldAutorotate {
-    return YES;
-}
-
-- (UIInterfaceOrientationMask)supportedInterfaceOrientations {
-    return UIInterfaceOrientationMaskAll;
-}
-
-- (void)viewDidLoad {
-    [super viewDidLoad];
-    self.view.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.25];
-    self.view.userInteractionEnabled = NO;
-    self.view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-}
-
-- (void)viewWillLayoutSubviews {
-    [super viewWillLayoutSubviews];
-    if (self.view.window) {
-        self.view.frame = self.view.window.bounds;
-    }
-}
-
-@end
-
-@interface _26HomeDimmingWindow : UIWindow
-@end
-
-@implementation _26HomeDimmingWindow
-
-- (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
-    return nil; // pass-through touches completely
-}
-
-- (BOOL)pointInside:(CGPoint)point withEvent:(UIEvent *)event {
-    return NO; // pass-through touches completely
-}
-
-- (BOOL)_canBecomeKeyWindow {
-    return NO;
-}
-
-- (BOOL)_canAffectStatusBarAppearance {
-    return NO;
-}
-
-- (BOOL)_shouldControlAutorotation {
-    return YES;
-}
-
-@end
-
-static _26HomeDimmingWindow *g_dimmingWindow = nil;
-
-static void updateWallpaperDimmingState(BOOL animated) {
-    if (!g_dimmingWindow) {
-        g_dimmingWindow = [[_26HomeDimmingWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
-        g_dimmingWindow.userInteractionEnabled = NO;
-        g_dimmingWindow.windowLevel = -2.5; // between wallpaper (-3.0) and hs (-2.0)
-        g_dimmingWindow.rootViewController = [[_26HomeDimmingViewController alloc] init];
-    }
-    
-    if (!g_dimmingWindow.windowScene) {
-        for (UIScene *scene in [[UIApplication sharedApplication] valueForKey:@"connectedScenes"]) {
-            if ([scene isKindOfClass:NSClassFromString(@"UIWindowScene")]) {
-                g_dimmingWindow.windowScene = (UIWindowScene *)scene;
-                break;
-            }
-        }
-    }
-    
-    g_dimmingWindow.frame = [UIScreen mainScreen].bounds;
-    if (g_dimmingWindow.rootViewController) {
-        g_dimmingWindow.rootViewController.view.frame = g_dimmingWindow.bounds;
-    }
-    
-    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.ngkhoi.26home"];
-    BOOL shouldDim = [defaults boolForKey:@"ngkhoi.26home.dimWallpaper"];
-    
-    if (shouldDim) {
-        g_dimmingWindow.hidden = NO;
-        if (animated) {
-            [UIView animateWithDuration:0.3 animations:^{
-                g_dimmingWindow.alpha = 1.0;
-            }];
-        } else {
-            g_dimmingWindow.alpha = 1.0;
-        }
-    } else {
-        if (animated) {
-            [UIView animateWithDuration:0.3 animations:^{
-                g_dimmingWindow.alpha = 0.0;
-            } completion:^(BOOL finished) {
-                if (![defaults boolForKey:@"ngkhoi.26home.dimWallpaper"]) {
-                    g_dimmingWindow.hidden = YES;
-                }
-            }];
-        } else {
-            g_dimmingWindow.alpha = 0.0;
-            g_dimmingWindow.hidden = YES;
-        }
-    }
-}
 
 CGFloat g_appIconBlurRadius = 1.0;
 BOOL g_isAppOpening = NO;
@@ -154,6 +49,7 @@ BOOL g_isSwitcherOpen = NO;
 BOOL g_isCoverSheetVisible = NO;
 BOOL g_isEditingMode = NO;
 NSString *g_menuAppearance = @"iOS26";
+BOOL g_hideGlassWhenUnfocused = YES;
 
 void reload26HomePrefs(void) {
     CFPreferencesAppSynchronize(CFSTR("com.ngkhoi.26home"));
@@ -174,6 +70,12 @@ void reload26HomePrefs(void) {
         g_exceptionsApplyOnlyToSolid = [prefs boolForKey:@"ngkhoi.26home.exceptionsApplyOnlyToSolid"];
     } else {
         g_exceptionsApplyOnlyToSolid = YES;
+    }
+    
+    if ([prefs objectForKey:@"ngkhoi.26home.hideGlassWhenUnfocused"]) {
+        g_hideGlassWhenUnfocused = [prefs boolForKey:@"ngkhoi.26home.hideGlassWhenUnfocused"];
+    } else {
+        g_hideGlassWhenUnfocused = YES;
     }
     
     g_menuAppearance = @"iOS26";
@@ -320,6 +222,30 @@ static void updateLiquidGlassLayout(UIView *button) {
                     }
                 }
                 
+                // fallback 2: tell iconManager to stop editing (Crucial for App Library on Home Button iPhones)
+                if ([iconController respondsToSelector:@selector(iconManager)]) {
+                    id iconManager = [iconController performSelector:@selector(iconManager)];
+                    Home26Log(@"[Diagnostics] Found iconManager: %@", iconManager);
+                    
+                    if ([iconManager respondsToSelector:@selector(setIsEditing:)]) {
+                        Home26Log(@"[Diagnostics] Calling setIsEditing:NO on iconManager");
+                        void (*setManagerEditing)(id, SEL, BOOL) = (void (*)(id, SEL, BOOL))[iconManager methodForSelector:@selector(setIsEditing:)];
+                        if (setManagerEditing) setManagerEditing(iconManager, @selector(setIsEditing:), NO);
+                    } else if ([iconManager respondsToSelector:@selector(setEditing:)]) {
+                        Home26Log(@"[Diagnostics] Calling setEditing:NO on iconManager");
+                        void (*setManagerEditing)(id, SEL, BOOL) = (void (*)(id, SEL, BOOL))[iconManager methodForSelector:@selector(setEditing:)];
+                        if (setManagerEditing) setManagerEditing(iconManager, @selector(setEditing:), NO);
+                    } else if ([iconManager respondsToSelector:@selector(setEditing:animated:)]) {
+                        Home26Log(@"[Diagnostics] Calling setEditing:NO animated:YES on iconManager");
+                        void (*setManagerEditingAnim)(id, SEL, BOOL, BOOL) = (void (*)(id, SEL, BOOL, BOOL))[iconManager methodForSelector:@selector(setEditing:animated:)];
+                        if (setManagerEditingAnim) setManagerEditingAnim(iconManager, @selector(setEditing:animated:), NO, YES);
+                    } else {
+                        Home26Log(@"[Diagnostics] WARNING: iconManager does not respond to any known editing setters!");
+                    }
+                } else {
+                    Home26Log(@"[Diagnostics] ERROR: SBIconController does NOT respond to iconManager!");
+                }
+                
                 UIViewController *vc = getViewControllerForView(weakSelf);
                 if ([vc isKindOfClass:%c(SBRootFolderController)]) {
                     SBRootFolderController *rootVC = (SBRootFolderController *)vc;
@@ -395,6 +321,25 @@ static void updateLiquidGlassLayout(UIView *button) {
                     void (*setIsEditing)(id, SEL, BOOL) = (void (*)(id, SEL, BOOL))[iconController methodForSelector:@selector(setIsEditing:)];
                     if (setIsEditing) {
                         setIsEditing(iconController, @selector(setIsEditing:), NO);
+                    }
+                }
+                if ([iconController respondsToSelector:@selector(iconManager)]) {
+                    id iconManager = [iconController performSelector:@selector(iconManager)];
+                    Home26Log(@"[Diagnostics] editWallpaper: Found iconManager: %@", iconManager);
+                    if ([iconManager respondsToSelector:@selector(setIsEditing:)]) {
+                        Home26Log(@"[Diagnostics] editWallpaper: Calling setIsEditing:NO on iconManager");
+                        void (*setManagerEditing)(id, SEL, BOOL) = (void (*)(id, SEL, BOOL))[iconManager methodForSelector:@selector(setIsEditing:)];
+                        if (setManagerEditing) setManagerEditing(iconManager, @selector(setIsEditing:), NO);
+                    } else if ([iconManager respondsToSelector:@selector(setEditing:)]) {
+                        Home26Log(@"[Diagnostics] editWallpaper: Calling setEditing:NO on iconManager");
+                        void (*setManagerEditing)(id, SEL, BOOL) = (void (*)(id, SEL, BOOL))[iconManager methodForSelector:@selector(setEditing:)];
+                        if (setManagerEditing) setManagerEditing(iconManager, @selector(setEditing:), NO);
+                    } else if ([iconManager respondsToSelector:@selector(setEditing:animated:)]) {
+                        Home26Log(@"[Diagnostics] editWallpaper: Calling setEditing:NO animated:YES on iconManager");
+                        void (*setManagerEditingAnim)(id, SEL, BOOL, BOOL) = (void (*)(id, SEL, BOOL, BOOL))[iconManager methodForSelector:@selector(setEditing:animated:)];
+                        if (setManagerEditingAnim) setManagerEditingAnim(iconManager, @selector(setEditing:animated:), NO, YES);
+                    } else {
+                        Home26Log(@"[Diagnostics] editWallpaper: WARNING: iconManager does not respond to any known editing setters!");
                     }
                 }
                 
@@ -934,11 +879,14 @@ static void updateTintViews(UIView *view, UIColor *tintColor) {
 - (void)applicationDidFinishLaunching:(id)application {
     %orig;
     
-    updateWallpaperDimmingState(NO);
+    // Automatically generate diagnostics on every respring
+    Home26GenerateDiagnosticsReport();
+    
+    
     
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         [[NSNotificationCenter defaultCenter] addObserverForName:@"ngkhoi.26home.UpdateWallpaperDimming" object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification * _Nonnull note) {
-            updateWallpaperDimmingState(YES);
+            
         }];
         [[NSNotificationCenter defaultCenter] addObserverForName:@"ngkhoi.26home.UpdateLiveTintColor" object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification * _Nonnull note) {
             NSString *hex = g_tintColor;
@@ -1106,7 +1054,10 @@ static void updateClockHandsInversionForView(UIView *view) {
     if (!isEditingMode && [self respondsToSelector:@selector(isEditing)]) {
         isEditingMode = ((BOOL (*)(id, SEL))[self methodForSelector:@selector(isEditing)])(self, @selector(isEditing));
     }
-    BOOL shouldHideForState = isExcludedApp || isEditingMode || !g_isHomeScreenVisible || g_isCoverSheetVisible || g_isSwitcherOpen || g_isAppOpening;
+    BOOL shouldHideForState = isExcludedApp;
+    if (g_hideGlassWhenUnfocused) {
+        shouldHideForState = shouldHideForState || isEditingMode || !g_isHomeScreenVisible || g_isCoverSheetVisible || g_isSwitcherOpen || g_isAppOpening;
+    }
     if (shouldHideForState) {
         UIView *glassView = [self viewWithTag:9001];
         if (glassView) {
@@ -1123,7 +1074,7 @@ static void updateClockHandsInversionForView(UIView *view) {
         return;
     }
     
-    if (g_isFolderOpen) {
+    if (g_hideGlassWhenUnfocused && g_isFolderOpen) {
         BOOL isInsideOpenFolder = NO;
         if ([self respondsToSelector:@selector(location)]) {
             NSString *loc = [self performSelector:@selector(location)];
@@ -1526,7 +1477,7 @@ static void updateClockHandsInversionForView(UIView *view) {
     }
 
     // hide glass if hs is obscured / in-app
-    if (!g_isHomeScreenVisible || g_isCoverSheetVisible || g_isSwitcherOpen || g_isAppOpening) {
+    if (g_hideGlassWhenUnfocused && (!g_isHomeScreenVisible || g_isCoverSheetVisible || g_isSwitcherOpen || g_isAppOpening)) {
         if (glassView) {
             glassView.hidden = YES;
             [glassView.layer setValue:@NO forKey:@"enabled"];
@@ -1562,7 +1513,7 @@ static void updateClockHandsInversionForView(UIView *view) {
     }
     
     // hide outside icons when folder open
-    if (g_isFolderOpen) {
+    if (g_hideGlassWhenUnfocused && g_isFolderOpen) {
         BOOL isInsideOpenFolder = NO;
         if ([self respondsToSelector:@selector(location)]) {
             NSString *loc = [self performSelector:@selector(location)];
@@ -2406,6 +2357,31 @@ static void Home26TriggerGlobalRefresh(void) {
 %end
 
 %hook SBIconController
+- (void)viewDidLoad {
+    %orig;
+    
+    // Initial state
+    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.ngkhoi.26home"];
+    BOOL shouldDim = [defaults boolForKey:@"ngkhoi.26home.dimWallpaper"];
+    if (shouldDim) {
+        self.view.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.25];
+    } else {
+        self.view.backgroundColor = [UIColor clearColor];
+    }
+    
+    // Observer for updates
+    [[NSNotificationCenter defaultCenter] addObserverForName:@"ngkhoi.26home.UpdateWallpaperDimming" object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification * _Nonnull note) {
+        NSUserDefaults *def = [[NSUserDefaults alloc] initWithSuiteName:@"com.ngkhoi.26home"];
+        BOOL dim = [def boolForKey:@"ngkhoi.26home.dimWallpaper"];
+        [UIView animateWithDuration:0.3 animations:^{
+            if (dim) {
+                self.view.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.25];
+            } else {
+                self.view.backgroundColor = [UIColor clearColor];
+            }
+        }];
+    }];
+}
 
 - (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection {
     %orig;

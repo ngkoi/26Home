@@ -10,7 +10,7 @@ static inline void Home26PostStyleUpdate18(void) {
 }
 
 static UIImage *LGCreateAutomaticWeatherImage(void) {
-    NSString *basePath = @"/var/jb/Library/Application Support/26Home/SolidGlass";
+    NSString *basePath = jbroot(@"/Library/Application Support/26Home/SolidGlass");
     if (![[NSFileManager defaultManager] fileExistsAtPath:basePath]) {
         basePath = @"/Library/Application Support/26Home/SolidGlass";
     }
@@ -203,7 +203,7 @@ static UIImage *LGCreateAutomaticWeatherImage(void) {
         CGFloat spacing = (menuWidth - (buttonSize * 4)) / 5.0;
         CGFloat startY = 70.0;
         
-        NSString *basePath = @"/var/jb/Library/Application Support/26Home/SolidGlass";
+        NSString *basePath = jbroot(@"/Library/Application Support/26Home/SolidGlass");
         if (![[NSFileManager defaultManager] fileExistsAtPath:basePath]) {
             basePath = @"/Library/Application Support/26Home/SolidGlass";
         }
@@ -451,6 +451,7 @@ static UIImage *LGCreateAutomaticWeatherImage(void) {
 - (void)selectStyle:(UIButton *)sender {
     NSUInteger index = sender.tag - 100;
     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.ngkhoi.26home"];
+    Home26Log(@"[User Action] iOS 18 Menu - Selected style index: %lu", (unsigned long)index);
     
     if (index == 0) { // Light
         [defaults setObject:@"Default" forKey:@"ngkhoi.26home.iconStyle"];
@@ -475,6 +476,7 @@ static UIImage *LGCreateAutomaticWeatherImage(void) {
 }
 
 - (void)selectScaleSmall:(UIButton *)sender {
+    Home26Log(@"[User Action] iOS 18 Menu - Selected scale: Small");
     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.ngkhoi.26home"];
     [defaults setBool:NO forKey:@"ngkhoi.26home.largeIcons"];
     [defaults synchronize];
@@ -494,6 +496,7 @@ static UIImage *LGCreateAutomaticWeatherImage(void) {
 }
 
 - (void)selectScaleLarge:(UIButton *)sender {
+    Home26Log(@"[User Action] iOS 18 Menu - Selected scale: Large");
     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.ngkhoi.26home"];
     [defaults setBool:YES forKey:@"ngkhoi.26home.largeIcons"];
     [defaults synchronize];
@@ -517,6 +520,7 @@ static UIImage *LGCreateAutomaticWeatherImage(void) {
     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.ngkhoi.26home"];
     BOOL current = [defaults boolForKey:@"ngkhoi.26home.dimWallpaper"];
     BOOL next = !current;
+    Home26Log(@"[User Action] iOS 18 Menu - Toggled wallpaper dimming to: %d", next);
     [defaults setBool:next forKey:@"ngkhoi.26home.dimWallpaper"];
     [defaults synchronize];
     
@@ -541,6 +545,7 @@ static UIImage *LGCreateAutomaticWeatherImage(void) {
     CGFloat r, g, b, a;
     [color getRed:&r green:&g blue:&b alpha:&a];
     NSString *hex = [NSString stringWithFormat:@"#%02lX%02lX%02lX", lroundf(r * 255), lroundf(g * 255), lroundf(b * 255)];
+    Home26Log(@"[User Action] iOS 18 Menu - Updated tint color to: %@", hex);
     [defaults setObject:hex forKey:@"ngkhoi.26home.tintColor"];
     [defaults synchronize];
     

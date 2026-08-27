@@ -2,21 +2,13 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 #import <objc/message.h>
-#import "Obfuscation.h"
+#if __has_include(<roothide.h>)
+#import <roothide.h>
+#else
+#define jbroot(path) [@"/var/jb" stringByAppendingString:path]
+#endif
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-static inline void Home26Log(NSString *format, ...) {
-    va_list args;
-    va_start(args, format);
-    NSString *msg = [[NSString alloc] initWithFormat:format arguments:args];
-    va_end(args);
-    NSLog(@"[26Home] %@", msg);
-}
-#ifdef __cplusplus
-}
-#endif
+#import "LGDebugger.h"
 
 @interface SBHEditingWidgetButton : UIButton
 @end
@@ -133,15 +125,15 @@ extern BOOL g_isEditingMode;
 extern void reload26HomePrefs(void);
 
 static inline UIImage *LGImageNamed(NSString *name) {
-    NSString *path = [NSString stringWithFormat:@"/var/jb/Library/Application Support/26Home/Icons/%@@3x.png", name];
+    NSString *path = jbroot([NSString stringWithFormat:@"/Library/Application Support/26Home/Icons/%@@3x.png", name]);
     UIImage *img = [UIImage imageWithContentsOfFile:path];
     if (img) return [[[UIImage alloc] initWithCGImage:img.CGImage scale:3.0 orientation:img.imageOrientation] imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
     
-    path = [NSString stringWithFormat:@"/var/jb/Library/Application Support/26Home/Icons/%@@2x.png", name];
+    path = jbroot([NSString stringWithFormat:@"/Library/Application Support/26Home/Icons/%@@2x.png", name]);
     img = [UIImage imageWithContentsOfFile:path];
     if (img) return [[[UIImage alloc] initWithCGImage:img.CGImage scale:2.0 orientation:img.imageOrientation] imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
     
-    path = [NSString stringWithFormat:@"/var/jb/Library/Application Support/26Home/Icons/%@.png", name];
+    path = jbroot([NSString stringWithFormat:@"/Library/Application Support/26Home/Icons/%@.png", name]);
     img = [UIImage imageWithContentsOfFile:path];
     if (img) return [img imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
     

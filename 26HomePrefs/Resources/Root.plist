@@ -120,6 +120,20 @@
 		</dict>
 		<dict>
 			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.ngkhoi.26home</string>
+			<key>key</key>
+			<string>ngkhoi.26home.hideGlassWhenUnfocused</string>
+			<key>label</key>
+			<string>Hide glass layer when unfocused</string>
+			<key>PostNotification</key>
+			<string>ngkhoi.26home.UpdateIconStyle</string>
+		</dict>
+		<dict>
+			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
 			<string>Actions</string>

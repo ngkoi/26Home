@@ -4,6 +4,12 @@
 #import <notify.h>
 #import <spawn.h>
 
+#if __has_include(<roothide.h>)
+#import <roothide.h>
+#else
+#define jbroot(path) [@"/var/jb" stringByAppendingString:path]
+#endif
+
 @implementation Home26PrefsRootListController
 
 - (void)viewDidLoad {
@@ -120,7 +126,7 @@
 - (void)respring:(id)sender {
     pid_t pid;
     const char *args[] = {"killall", "-9", "backboardd", NULL};
-    posix_spawn(&pid, "/var/jb/usr/bin/killall", NULL, NULL, (char *const *)args, NULL);
+    posix_spawn(&pid, jbroot(@"/usr/bin/killall").UTF8String, NULL, NULL, (char *const *)args, NULL);
 }
 
 @end

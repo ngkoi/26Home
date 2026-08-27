@@ -76,7 +76,7 @@ extern NSString *g_menuAppearance;
         NSMutableDictionary *pathsCache = [NSMutableDictionary dictionary];
         NSArray *themes = @[@"Light", @"Dark", @"ClearLight", @"ClearDark", @"DefaultNS", @"DarkNS"];
         for (NSString *theme in themes) {
-            NSString *basePath1 = [NSString stringWithFormat:@"/var/jb/Library/Application Support/26Home/SolidGlass/%@", theme];
+            NSString *basePath1 = jbroot([NSString stringWithFormat:@"/Library/Application Support/26Home/SolidGlass/%@", theme]);
             NSString *basePath2 = [NSString stringWithFormat:@"/Library/Application Support/26Home/SolidGlass/%@", theme];
             NSString *basePath = [[NSFileManager defaultManager] fileExistsAtPath:basePath1] ? basePath1 : basePath2;
             
