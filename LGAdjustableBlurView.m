@@ -18,6 +18,33 @@
     return self;
 }
 
+- (void)setQualityScale:(CGFloat)qualityScale {
+    _qualityScale = fminf(fmaxf(qualityScale, 0.10), 0.75);
+    CALayer *layer = self.layer;
+    if (layer) {
+        @try {
+            [layer setValue:@(_qualityScale) forKey:@"scale"];
+        } @catch (NSException *e) {}
+    }
+}
+
+- (void)setBlurRadius:(CGFloat)blurRadius {
+    _blurRadius = blurRadius;
+    CALayer *layer = self.layer;
+    if (layer) {
+        NSArray *existing = layer.filters;
+        if (existing.count >= 1) {
+            id blurFilter = existing[0];
+            @try {
+                [blurFilter setValue:@(_blurRadius) forKey:@"inputRadius"];
+                layer.filters = @[blurFilter];
+                return;
+            } @catch (NSException *e) {}
+        }
+    }
+    [self applyFilters];
+}
+
 - (void)didMoveToWindow { [super didMoveToWindow]; [self applyFilters]; }
 - (void)layoutSubviews  { [super layoutSubviews];  [self applyFilters]; }
 

@@ -12,6 +12,35 @@
 
 @implementation Home26PrefsRootListController
 
+- (void)viewDidAppear:(BOOL)animated {
+    [super viewDidAppear:animated];
+    
+    // Check for SnowBoard
+    BOOL hasSnowBoard = NO;
+    if (([[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb/Library/MobileSubstrate/DynamicLibraries/SnowBoard.dylib"] || [[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb/Library/MobileSubstrate/DynamicLibraries/Snowboard.dylib"] || [[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb/Library/MobileSubstrate/DynamicLibraries/AAASnowBoardStub.dylib"])) {
+        hasSnowBoard = YES;
+    } else if (([[NSFileManager defaultManager] fileExistsAtPath:@"/Library/MobileSubstrate/DynamicLibraries/SnowBoard.dylib"] || [[NSFileManager defaultManager] fileExistsAtPath:@"/Library/MobileSubstrate/DynamicLibraries/Snowboard.dylib"] || [[NSFileManager defaultManager] fileExistsAtPath:@"/Library/MobileSubstrate/DynamicLibraries/AAASnowBoardStub.dylib"])) {
+        hasSnowBoard = YES;
+    }
+    
+    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.ngkhoi.26home"];
+    BOOL hasWarned = [defaults boolForKey:@"HasWarnedAboutSnowBoard"];
+    
+    if (hasSnowBoard && !hasWarned) {
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"⚠️ SnowBoard Detected"
+                                                                       message:@"Using SnowBoard (even with themes disabled) can harm performance, drain battery, and cause unexpected visual bugs with 26Home.\n\nFor the absolute best, lag-free experience, it is highly recommended to completely UNINSTALL SnowBoard."
+                                                                preferredStyle:UIAlertControllerStyleAlert];
+        
+        [alert addAction:[UIAlertAction actionWithTitle:@"I Understand" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+            [defaults setBool:YES forKey:@"HasWarnedAboutSnowBoard"];
+            [defaults synchronize];
+        }]];
+        
+        [self presentViewController:alert animated:YES completion:nil];
+    }
+}
+
+
 - (void)viewDidLoad {
     [super viewDidLoad];
     

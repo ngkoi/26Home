@@ -153,6 +153,7 @@ static inline UIImage *LGImageNamed(NSString *name) {
 @property (nonatomic, assign) BOOL capturesAppIcon;
 @property (nonatomic, assign) CGFloat qualityScale;
 - (instancetype)initWithFrame:(CGRect)frame blurRadius:(CGFloat)radius;
+- (void)applyFilters;
 @end
 
 @interface LGEyedropperOverlayView : UIView

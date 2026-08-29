@@ -102,9 +102,43 @@
                 model.name = name;
                 
                 // app icon (29x29 format 0)
-                if ([UIImage respondsToSelector:@selector(_applicationIconImageForBundleIdentifier:format:scale:)]) {
-                    model.icon = [UIImage _applicationIconImageForBundleIdentifier:bid format:0 scale:[UIScreen mainScreen].scale];
+
+                UIImage *rawIcon = nil;
+                // Try LSApplicationProxy first to bypass SnowBoard
+                @try {
+                    Class lsProxyClass = NSClassFromString(@"LSApplicationProxy");
+                    if (lsProxyClass) {
+                        id proxy = [lsProxyClass performSelector:@selector(applicationProxyForIdentifier:) withObject:bid];
+                        if (proxy && [proxy respondsToSelector:@selector(iconDataForVariant:)]) {
+                            // variant 2 is usually small/medium, variant 1 is tiny, variant 0 is generic?
+                            // Let's try 17 or 20 (standard variants) or just fallback to generic
+                            // Just try 1 (29x29) or 2 (60x60) or 17 (App Store)
+                            for (int variant = 2; variant <= 5; variant++) {
+                                id data = [proxy performSelector:@selector(iconDataForVariant:) withObject:@(variant)];
+                                if (data && [data isKindOfClass:[NSData class]]) {
+                                    rawIcon = [UIImage imageWithData:data scale:[UIScreen mainScreen].scale];
+                                    if (rawIcon) break;
+                                }
+                            }
+                        }
+                    }
+                } @catch (NSException *e) {}
+                
+                if (!rawIcon && [UIImage respondsToSelector:@selector(_applicationIconImageForBundleIdentifier:format:scale:)]) {
+                    rawIcon = [UIImage _applicationIconImageForBundleIdentifier:bid format:0 scale:[UIScreen mainScreen].scale];
                 }
+
+                if (rawIcon) {
+                    Class genClass = NSClassFromString(@"LGCustomIconGenerator2");
+                    if (genClass && [genClass respondsToSelector:@selector(sharedInstance)]) {
+                        id gen = [genClass performSelector:@selector(sharedInstance)];
+                        if (gen && [gen respondsToSelector:@selector(requestIconImageWithBackgroundForImage:bundleID:)]) {
+                            UIImage *styled = [gen performSelector:@selector(requestIconImageWithBackgroundForImage:bundleID:) withObject:rawIcon withObject:bid];
+                            if (styled) rawIcon = styled;
+                        }
+                    }
+                }
+                model.icon = rawIcon;
                 
                 [appsList addObject:model];
             }

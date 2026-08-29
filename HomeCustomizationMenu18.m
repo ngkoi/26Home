@@ -69,31 +69,52 @@ static UIImage *LGCreateAutomaticWeatherImage(void) {
 @implementation HomeCustomizationMenuContainer18
 
 - (CGFloat)_bottomOffset {
-    if ([UIDevice currentDevice].userInterfaceIdiom == UIUserInterfaceIdiomPad) {
-        CGFloat dockHeight = 0.0;
-        if (NSClassFromString(@"SBIconController")) {
-            id iconController = nil;
-            if ([NSClassFromString(@"SBIconController") respondsToSelector:@selector(sharedInstance)]) {
-                iconController = [NSClassFromString(@"SBIconController") performSelector:@selector(sharedInstance)];
-            }
-            if (iconController && [iconController respondsToSelector:@selector(floatingDockController)]) {
-                id floatDockCtrl = [iconController performSelector:@selector(floatingDockController)];
-                if (floatDockCtrl && [floatDockCtrl respondsToSelector:@selector(floatingDockView)]) {
-                    UIView *dockView = [floatDockCtrl performSelector:@selector(floatingDockView)];
-                    if (dockView && dockView.window && !dockView.hidden) {
-                        CGRect dockFrame = [dockView convertRect:dockView.bounds toView:self];
-                        if (dockFrame.size.height > 0 && dockFrame.origin.y > 0) {
-                            dockHeight = self.bounds.size.height - dockFrame.origin.y;
-                        }
+    CGFloat floatDockHeight = 0.0;
+    
+    // find floating dock
+    NSArray *windows = [[UIApplication sharedApplication] valueForKey:@"windows"];
+    for (UIWindow *window in windows) {
+        if (!window.hidden && window.alpha > 0.0 && window.bounds.size.height > 0) {
+            NSMutableArray *queue = [NSMutableArray arrayWithObject:window];
+            UIView *foundFloatingDock = nil;
+            
+            while (queue.count > 0) {
+                UIView *v = [queue firstObject];
+                [queue removeObjectAtIndex:0];
+                
+                NSString *className = NSStringFromClass([v class]);
+                // check for floating dock view
+                if ([className containsString:@"FloatingDockView"]) {
+                    // must be visible
+                    if (!v.hidden && v.alpha > 0.0) {
+                        foundFloatingDock = v;
+                        break;
                     }
+                }
+                
+                if (v.subviews.count > 0) {
+                    [queue addObjectsFromArray:v.subviews];
+                }
+            }
+            
+            if (foundFloatingDock) {
+                CGRect frameInScreen = [foundFloatingDock convertRect:foundFloatingDock.bounds toView:nil];
+                if (frameInScreen.size.height > 0 && frameInScreen.origin.y > 0) {
+                    floatDockHeight = [UIScreen mainScreen].bounds.size.height - frameInScreen.origin.y;
+                    break;
                 }
             }
         }
-        if (dockHeight <= 0.0) {
-            dockHeight = 96.0;
-        }
-        return dockHeight + 14.0;
     }
+    
+    if (floatDockHeight > 0.0) {
+        return floatDockHeight + 14.0;
+    }
+    
+    if ([UIDevice currentDevice].userInterfaceIdiom == UIUserInterfaceIdiomPad) {
+        return 96.0 + 14.0; // ipad fallback
+    }
+    
     return 8.0;
 }
 
@@ -468,6 +489,42 @@ static UIImage *LGCreateAutomaticWeatherImage(void) {
     [defaults synchronize];
     
     [self updateStyleSelection:YES];
+
+    // SnowBoard warning alert
+    BOOL hasSnowBoard = NO;
+    if (([[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb/Library/MobileSubstrate/DynamicLibraries/SnowBoard.dylib"] || [[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb/Library/MobileSubstrate/DynamicLibraries/Snowboard.dylib"] || [[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb/Library/MobileSubstrate/DynamicLibraries/AAASnowBoardStub.dylib"]) || 
+        ([[NSFileManager defaultManager] fileExistsAtPath:@"/Library/MobileSubstrate/DynamicLibraries/SnowBoard.dylib"] || [[NSFileManager defaultManager] fileExistsAtPath:@"/Library/MobileSubstrate/DynamicLibraries/Snowboard.dylib"] || [[NSFileManager defaultManager] fileExistsAtPath:@"/Library/MobileSubstrate/DynamicLibraries/AAASnowBoardStub.dylib"])) {
+        hasSnowBoard = YES;
+    }
+    
+    if (hasSnowBoard) {
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"⚠️ SnowBoard Detected"
+                                                                       message:@"Using SnowBoard (even with themes disabled) can harm performance, drain battery, and cause unexpected visual bugs with 26Home.\n\nFor the absolute best, lag-free experience, it is highly recommended to completely UNINSTALL SnowBoard."
+                                                                preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"I Understand" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+            [defaults setBool:YES forKey:@"HasWarnedAboutSnowBoard"];
+            [defaults synchronize];
+        }]];
+        
+
+        UIViewController *topVC = nil;
+        for (UIWindow *w in [[UIApplication sharedApplication] valueForKey:@"windows"]) {
+            if (w.isKeyWindow) {
+                topVC = w.rootViewController;
+                break;
+            }
+        }
+        if (!topVC && [[[UIApplication sharedApplication] valueForKey:@"windows"] count] > 0) {
+            topVC = ((UIWindow *)[[[UIApplication sharedApplication] valueForKey:@"windows"] firstObject]).rootViewController;
+        }
+        while (topVC.presentedViewController) {
+            topVC = topVC.presentedViewController;
+        }
+        if (topVC) {
+            [topVC presentViewController:alert animated:YES completion:nil];
+        }
+
+    }
     
     [[NSNotificationCenter defaultCenter] postNotificationName:@"ngkhoi.26home.PurgeCaches" object:nil];
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -532,7 +589,7 @@ static UIImage *LGCreateAutomaticWeatherImage(void) {
         sender.tintColor = next ? [UIColor whiteColor] : [UIColor colorWithWhite:1.0 alpha:0.55];
     } completion:nil];
     
-    [[NSNotificationCenter defaultCenter] postNotificationName:@"ngkhoi.26home.UpdateWallpaperDimming" object:nil];
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"ngkhoi.26home.UpdateWallpaperDimming" object:nil userInfo:@{@"dimmed": @(next)}];
 }
 
 - (void)_saveTintColor {
@@ -616,7 +673,7 @@ static UIImage *LGCreateAutomaticWeatherImage(void) {
         UIWindow *keyWindow = self.window ?: [[UIApplication sharedApplication] keyWindow];
         
         UIGraphicsBeginImageContextWithOptions(keyWindow.bounds.size, NO, 0.0);
-        for (UIWindow *w in [[UIApplication sharedApplication] windows]) {
+        for (UIWindow *w in [[UIApplication sharedApplication] valueForKey:@"windows"]) {
 #pragma clang diagnostic pop
             if (w.hidden || w.alpha < 0.01) continue;
             [w drawViewHierarchyInRect:w.bounds afterScreenUpdates:YES];

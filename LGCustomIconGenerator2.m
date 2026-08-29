@@ -173,7 +173,8 @@ extern NSString *g_menuAppearance;
     CGPoint rimStart = CGPointMake(0, 0);
     CGPoint rimEnd = CGPointMake(image.size.width, image.size.height);
     
-    CGContextDrawLinearGradient(context, rimGradient, rimStart, rimEnd, 0);
+    CGContextSetBlendMode(context, kCGBlendModePlusLighter);
+        CGContextDrawLinearGradient(context, rimGradient, rimStart, rimEnd, 0);
     
     CGGradientRelease(rimGradient);
     CGColorSpaceRelease(rimColorSpace);
@@ -295,9 +296,8 @@ extern NSString *g_menuAppearance;
         if ([darkIconMode isEqualToString:@"Always"]) {
             isDarkTheme = YES;
             effectiveStyle = @"Dark";
-        } else { // "Auto"
+        } else {
             isDarkTheme = isSystemDark;
-            // Dark Auto: In light mode -> use Default (light) icons theme; in dark mode -> use Dark theme design
             effectiveStyle = isSystemDark ? @"Dark" : @"Default";
         }
     } else if ([style isEqualToString:@"Clear"] || [style isEqualToString:@"Tinted"]) {
@@ -508,7 +508,8 @@ extern NSString *g_menuAppearance;
                 CGPoint rimStart = CGPointMake(0, 0);
                 CGPoint rimEnd = CGPointMake(styled.size.width, styled.size.height);
                 
-                CGContextDrawLinearGradient(context, rimGradient, rimStart, rimEnd, 0);
+                CGContextSetBlendMode(context, kCGBlendModePlusLighter);
+        CGContextDrawLinearGradient(context, rimGradient, rimStart, rimEnd, 0);
                 
                 CGGradientRelease(rimGradient);
                 CGColorSpaceRelease(rimColorSpace);
@@ -603,7 +604,8 @@ extern NSString *g_menuAppearance;
             CGPoint rimStart = CGPointMake(0, 0);
             CGPoint rimEnd = CGPointMake(glyph.size.width, glyph.size.height);
             
-            CGContextDrawLinearGradient(context, rimGradient, rimStart, rimEnd, 0);
+            CGContextSetBlendMode(context, kCGBlendModePlusLighter);
+        CGContextDrawLinearGradient(context, rimGradient, rimStart, rimEnd, 0);
             CGGradientRelease(rimGradient);
             CGColorSpaceRelease(rimColorSpace);
             CGContextRestoreGState(context);
@@ -691,7 +693,8 @@ extern NSString *g_menuAppearance;
             CGPoint rimStart = CGPointMake(0, 0);
             CGPoint rimEnd = CGPointMake(glyph.size.width, glyph.size.height);
             
-            CGContextDrawLinearGradient(context, rimGradient, rimStart, rimEnd, 0);
+            CGContextSetBlendMode(context, kCGBlendModePlusLighter);
+        CGContextDrawLinearGradient(context, rimGradient, rimStart, rimEnd, 0);
             
             CGGradientRelease(rimGradient);
             CGColorSpaceRelease(rimColorSpace);
@@ -745,6 +748,7 @@ extern NSString *g_menuAppearance;
         CGPoint rimStart = CGPointMake(0, 0);
         CGPoint rimEnd = CGPointMake(glyph.size.width, glyph.size.height);
         
+        CGContextSetBlendMode(context, kCGBlendModePlusLighter);
         CGContextDrawLinearGradient(context, rimGradient, rimStart, rimEnd, 0);
         
         CGGradientRelease(rimGradient);
@@ -1024,7 +1028,7 @@ typedef struct {
             CGFloat g = (a > 0) ? (rawData[idx+1] / 255.0) / a : 0;
             CGFloat b = (a > 0) ? (rawData[idx+2] / 255.0) / a : 0;
             
-            // Smart gradient boundary box
+            // gradient bounds
             CGFloat dr = 0, dg = 0, db = 0;
             CGFloat minR = MIN(bg.tR, bg.bR) - 0.1;
             CGFloat maxR = MAX(bg.tR, bg.bR) + 0.1;
@@ -1208,7 +1212,7 @@ typedef struct {
 }
 
 - (UIImage *)generateDarkIconForImage:(UIImage *)image bundleID:(NSString *)bundleID {
-    // explicitly skip complex stock apps that cannot be procedurally processed
+    // skip complex stock icons
     NSSet *skipApps = [NSSet setWithObjects:
                        @"com.apple.camera",
                        @"com.apple.mobilenotes",

@@ -1,7 +1,7 @@
 Package: com.ngkhoi.26home
 Name: 26Home
 Depends: mobilesubstrate
-Version: 1.1.5.3
+Version: 1.1.7
 Architecture: iphoneos-arm64
 Description: iOS 26 Homescreen customization.
 Maintainer: ngkhoi

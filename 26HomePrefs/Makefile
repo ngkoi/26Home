@@ -10,5 +10,6 @@ BUNDLE_NAME = 26HomePrefs
 26HomePrefs_PRIVATE_FRAMEWORKS = Preferences
 26HomePrefs_INSTALL_PATH = /Library/PreferenceBundles
 26HomePrefs_CFLAGS = -fobjc-arc
+26HomePrefs_LDFLAGS = -undefined dynamic_lookup
 
 include $(THEOS_MAKE_PATH)/bundle.mk

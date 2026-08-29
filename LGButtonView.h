@@ -7,6 +7,7 @@
 @property (nonatomic, strong) LGAdjustableBlurView *blurView;
 @property (nonatomic, strong) LGLiveBackdropView *lgView;
 @property (nonatomic, strong) UIImageView *innerGlowView;
+@property (nonatomic, strong) UIImageView *hotCoreView;
 @property (nonatomic, strong) CAGradientLayer *specularRimLayer;
 @property (nonatomic, strong) CAShapeLayer *specularMaskLayer;
 @property (nonatomic, strong) UILabel *titleLabel;

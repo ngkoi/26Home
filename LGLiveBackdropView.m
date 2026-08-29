@@ -17,6 +17,16 @@
     return self;
 }
 
+- (void)setQualityScale:(CGFloat)qualityScale {
+    _qualityScale = fminf(fmaxf(qualityScale, 0.10), 0.75);
+    CALayer *layer = self.layer;
+    if (layer) {
+        @try {
+            [layer setValue:@(_qualityScale) forKey:@"scale"];
+        } @catch (NSException *e) {}
+    }
+}
+
 - (void)didMoveToWindow { [super didMoveToWindow]; [self applyFilters]; }
 - (void)layoutSubviews  { [super layoutSubviews];  [self applyFilters]; }
 

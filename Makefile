@@ -8,6 +8,7 @@ include $(THEOS)/makefiles/common.mk
 TWEAK_NAME = 26Home
 
 26Home_FILES = LGLiveBackdropView.m LGAdjustableBlurView.m HomeCustomizationMenu.m HomeCustomizationMenu18.m LGCustomIconGenerator2.m Hooks.x LGButtonView.m
+26Home_FRAMEWORKS = UIKit QuartzCore Metal
 26Home_CFLAGS = -fobjc-arc -fvisibility=hidden -O3
 26Home_LDFLAGS = -Wl,-dead_strip
 

@@ -7,17 +7,6 @@
 		<key>Bundles</key>
 		<array>
 			<string>com.apple.springboard</string>
-			<string>com.apple.UIKitCore</string>
-			<string>com.apple.Preferences</string>
-			<string>com.apple.Spotlight</string>
-			<string>com.apple.SearchUI</string>
-			<string>com.apple.IconServices</string>
-			<string>com.apple.searchd</string>
-			<string>com.apple.UserNotificationsUI</string>
-		</array>
-		<key>Executables</key>
-		<array>
-			<string>iconservicesagent</string>
 		</array>
 	</dict>
 </dict>

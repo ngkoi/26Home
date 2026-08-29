@@ -8,6 +8,76 @@ static id GetIconGenerator() {
 }
 #import <UIKit/UIKit.h>
 
+static UIView *g_dimView = nil;
+static double g_coverSheetProgress = 0.0;
+static BOOL g_isWallpaperDimmed = NO;
+
+static UIWindow *GetWallpaperWindow(void) {
+    id wc = [NSClassFromString(@"SBWallpaperController") sharedInstance];
+    if (wc) {
+        @try {
+            UIWindow *ww = [wc valueForKey:@"wallpaperWindow"] ?: [wc valueForKey:@"_wallpaperWindow"];
+            if (ww && [ww isKindOfClass:[UIWindow class]]) {
+                return ww;
+            }
+        } @catch (id e) {}
+    }
+    return nil;
+}
+
+static void EnsureWallpaperDimView(void) {
+    if (g_dimView && g_dimView.superview) return;
+    
+    UIWindow *ww = GetWallpaperWindow();
+    if (!ww) return;
+    
+    CGRect screenBounds = [UIScreen mainScreen].bounds;
+    g_dimView = [ww viewWithTag:99926];
+    
+    if (!g_dimView) {
+        g_dimView = [[UIView alloc] initWithFrame:CGRectMake(-500.0, -500.0, screenBounds.size.width + 1000.0, screenBounds.size.height + 1000.0)];
+        g_dimView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        g_dimView.backgroundColor = [UIColor blackColor];
+        g_dimView.userInteractionEnabled = NO;
+        g_dimView.layer.masksToBounds = NO;
+        g_dimView.clipsToBounds = NO;
+        g_dimView.alpha = 0.0;
+        g_dimView.tag = 99926;
+        [ww addSubview:g_dimView];
+    }
+}
+
+void UpdateWallpaperDimState(BOOL dimmed, BOOL animated) {
+    g_isWallpaperDimmed = dimmed;
+    if (dimmed) EnsureWallpaperDimView();
+    if (!g_dimView) return;
+    
+    if (g_dimView.superview) {
+        [g_dimView.superview bringSubviewToFront:g_dimView];
+    }
+    
+    id csManager = [%c(SBCoverSheetPresentationManager) performSelector:@selector(sharedInstanceIfExists)];
+    if (csManager && [csManager respondsToSelector:@selector(isPresented)]) {
+        BOOL presented = ((BOOL (*)(id, SEL))[csManager methodForSelector:@selector(isPresented)])(csManager, @selector(isPresented));
+        if (presented && g_coverSheetProgress == 0.0) {
+            g_coverSheetProgress = 1.0;
+        } else if (!presented && g_coverSheetProgress == 1.0) {
+            g_coverSheetProgress = 0.0;
+        }
+    }
+    
+    CGFloat baseAlpha = dimmed ? 0.35 : 0.0;
+    CGFloat targetAlpha = baseAlpha * (1.0 - g_coverSheetProgress);
+    
+    if (animated) {
+        [UIView animateWithDuration:0.3 delay:0 options:UIViewAnimationOptionCurveEaseInOut animations:^{
+            g_dimView.alpha = targetAlpha;
+        } completion:nil];
+    } else {
+        g_dimView.alpha = targetAlpha;
+    }
+}
+
 BOOL g_tweakEnabled = YES;
 BOOL g_bypassingIconHook = NO;
 
@@ -42,6 +112,7 @@ BOOL isAppExcluded(NSString *bundleID) {
 
 
 CGFloat g_appIconBlurRadius = 1.0;
+CGFloat g_appIconGlassQuality = 0.35;
 BOOL g_isAppOpening = NO;
 BOOL g_isFolderOpen = NO;
 BOOL g_isHomeScreenVisible = YES;
@@ -91,6 +162,16 @@ void reload26HomePrefs(void) {
     } else {
         g_appIconBlurRadius = 1.0;
     }
+    
+    CFPropertyListRef qualityVal = CFPreferencesCopyAppValue(CFSTR("ngkhoi.26home.appIconGlassQuality"), CFSTR("com.ngkhoi.26home"));
+    if (qualityVal && [(__bridge id)qualityVal isKindOfClass:[NSNumber class]]) {
+        g_appIconGlassQuality = [(__bridge NSNumber *)qualityVal floatValue];
+        CFRelease(qualityVal);
+    } else {
+        g_appIconGlassQuality = 0.35;
+    }
+    if (g_appIconGlassQuality < 0.10) g_appIconGlassQuality = 0.10;
+    if (g_appIconGlassQuality > 0.75) g_appIconGlassQuality = 0.75;
 }
 
 static void notifyAllIconsVisibilityChanged(void) {
@@ -885,9 +966,16 @@ static void updateTintViews(UIView *view, UIColor *tintColor) {
     
     
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        BOOL isDimmedInit = [[[NSUserDefaults alloc] initWithSuiteName:@"com.ngkhoi.26home"] boolForKey:@"ngkhoi.26home.dimWallpaper"];
+        if (isDimmedInit) {
+            UpdateWallpaperDimState(YES, NO);
+        }
+        
         [[NSNotificationCenter defaultCenter] addObserverForName:@"ngkhoi.26home.UpdateWallpaperDimming" object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification * _Nonnull note) {
-            
+            BOOL dimmed = [note.userInfo[@"dimmed"] boolValue];
+            UpdateWallpaperDimState(dimmed, YES);
         }];
+
         [[NSNotificationCenter defaultCenter] addObserverForName:@"ngkhoi.26home.UpdateLiveTintColor" object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification * _Nonnull note) {
             NSString *hex = g_tintColor;
             if (!hex) return;
@@ -1124,11 +1212,12 @@ static void updateClockHandsInversionForView(UIView *view) {
         if (iconIndex == NSNotFound) iconIndex = 0;
         
         CGFloat effectiveBlurRadius = g_appIconBlurRadius > 0.0 ? g_appIconBlurRadius : 1.0;
+        CGFloat effectiveQuality = g_appIconGlassQuality > 0.0 ? g_appIconGlassQuality : 0.35;
         
         if (shouldApplyBlur) {
             if (!blurView) {
                 blurView = [[LGAdjustableBlurView alloc] initWithFrame:iconImageView.frame blurRadius:effectiveBlurRadius];
-                blurView.qualityScale = 0.35;
+                blurView.qualityScale = effectiveQuality;
                 blurView.tag = 9002;
                 [blurView.layer setValue:@"dylv.liquidglass.blur.shared" forKey:@"groupName"];
                 blurView.layer.masksToBounds = YES;
@@ -1136,6 +1225,7 @@ static void updateClockHandsInversionForView(UIView *view) {
                 [container insertSubview:blurView belowSubview:iconImageView];
             } else {
                 blurView.blurRadius = effectiveBlurRadius;
+                blurView.qualityScale = effectiveQuality;
             }
             blurView.hidden = NO;
         } else {
@@ -1146,7 +1236,7 @@ static void updateClockHandsInversionForView(UIView *view) {
         if (shouldApplyGlass) {
             if (!glassView) {
                 glassView = [[LGLiveBackdropView alloc] initWithFrame:iconImageView.frame];
-                glassView.qualityScale = 0.35;
+                glassView.qualityScale = effectiveQuality;
                 glassView.capturesAppIcon = YES;
                 glassView.tag = 9001;
                 glassView.layer.masksToBounds = YES;
@@ -1157,6 +1247,8 @@ static void updateClockHandsInversionForView(UIView *view) {
                     [container insertSubview:glassView belowSubview:iconImageView];
                 }
                 [glassView forceReapplyForRegistrationRace];
+            } else {
+                glassView.qualityScale = effectiveQuality;
             }
             glassView.hidden = NO;
         } else {
@@ -2359,28 +2451,6 @@ static void Home26TriggerGlobalRefresh(void) {
 %hook SBIconController
 - (void)viewDidLoad {
     %orig;
-    
-    // Initial state
-    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.ngkhoi.26home"];
-    BOOL shouldDim = [defaults boolForKey:@"ngkhoi.26home.dimWallpaper"];
-    if (shouldDim) {
-        self.view.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.25];
-    } else {
-        self.view.backgroundColor = [UIColor clearColor];
-    }
-    
-    // Observer for updates
-    [[NSNotificationCenter defaultCenter] addObserverForName:@"ngkhoi.26home.UpdateWallpaperDimming" object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification * _Nonnull note) {
-        NSUserDefaults *def = [[NSUserDefaults alloc] initWithSuiteName:@"com.ngkhoi.26home"];
-        BOOL dim = [def boolForKey:@"ngkhoi.26home.dimWallpaper"];
-        [UIView animateWithDuration:0.3 animations:^{
-            if (dim) {
-                self.view.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.25];
-            } else {
-                self.view.backgroundColor = [UIColor clearColor];
-            }
-        }];
-    }];
 }
 
 - (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection {
@@ -2406,6 +2476,36 @@ static void Home26TriggerGlobalRefresh(void) {
     }
 }
 
+%end
+
+%hook SBCoverSheetPresentationManager
+- (void)_setTransitionProgress:(double)arg1 animated:(BOOL)arg2 gestureActive:(BOOL)arg3 coverSheetProgress:(double)arg4 completion:(id)arg5 {
+    %orig;
+    g_coverSheetProgress = arg4;
+    
+    if (g_isWallpaperDimmed && g_dimView) {
+        CGFloat baseAlpha = 0.35;
+        CGFloat targetAlpha = baseAlpha * (1.0 - g_coverSheetProgress);
+        g_dimView.alpha = targetAlpha;
+    }
+}
+
+- (void)_setCoverSheetPresented:(BOOL)arg1 forcePresented:(BOOL)arg2 animated:(BOOL)arg3 options:(id)arg4 withCompletion:(id)arg5 {
+    %orig;
+    g_coverSheetProgress = arg1 ? 1.0 : 0.0;
+    
+    if (g_isWallpaperDimmed && g_dimView) {
+        CGFloat baseAlpha = 0.35;
+        CGFloat targetAlpha = baseAlpha * (1.0 - g_coverSheetProgress);
+        if (arg3) {
+            [UIView animateWithDuration:0.3 delay:0 options:UIViewAnimationOptionCurveEaseInOut animations:^{
+                g_dimView.alpha = targetAlpha;
+            } completion:nil];
+        } else {
+            g_dimView.alpha = targetAlpha;
+        }
+    }
+}
 %end
 
 %end // End SpringBoardHooks
@@ -2604,9 +2704,11 @@ static void Home26TriggerGlobalRefresh(void) {
     }
     
     NSString *bundleId = [[NSBundle mainBundle] bundleIdentifier];
-    BOOL isSpringBoard = [bundleId isEqualToString:@"com.apple.springboard"];
+    if (![bundleId isEqualToString:@"com.apple.springboard"]) {
+        return;
+    }
     
-        %init(UIKitHooks);
+    %init(UIKitHooks);
     if (objc_getClass("SearchUIAppIconImage") || objc_getClass("SearchUIImage")) {
         %init(SearchUIHooks);
     }
@@ -2614,8 +2716,7 @@ static void Home26TriggerGlobalRefresh(void) {
         %init(IconImageViewHooks);
     }
     
-    if (isSpringBoard) {
-        %init(SpringBoardHooks);
+    %init(SpringBoardHooks);
     
     void (^refreshKnownIcons)(void) = ^{
         Home26Log(@"--- refreshKnownIcons START ---");
@@ -2734,6 +2835,48 @@ static void Home26TriggerGlobalRefresh(void) {
         refreshKnownIcons();
     }];
     
+    void (^updateLiveGlassAndBlur)(void) = ^{
+        reload26HomePrefs();
+        CGFloat effectiveQuality = g_appIconGlassQuality > 0.0 ? g_appIconGlassQuality : 0.35;
+        CGFloat effectiveBlurRadius = g_appIconBlurRadius > 0.0 ? g_appIconBlurRadius : 1.0;
+        
+        id iconController = nil;
+        if ([%c(SBIconController) respondsToSelector:@selector(sharedInstance)]) {
+            iconController = [%c(SBIconController) performSelector:@selector(sharedInstance)];
+        }
+        if (iconController) {
+            id iconManager = nil;
+            if ([iconController respondsToSelector:@selector(iconManager)]) {
+                iconManager = [iconController performSelector:@selector(iconManager)];
+            } else {
+                iconManager = iconController;
+            }
+            if (iconManager && [iconManager respondsToSelector:@selector(enumerateKnownIconViewsUsingBlock:)]) {
+                void (*enumerate)(id, SEL, void (^)(id)) = (void (*)(id, SEL, void (^)(id)))[iconManager methodForSelector:@selector(enumerateKnownIconViewsUsingBlock:)];
+                enumerate(iconManager, @selector(enumerateKnownIconViewsUsingBlock:), ^(UIView *iconView) {
+                    LGLiveBackdropView *glassView = [iconView viewWithTag:9001];
+                    if (glassView) {
+                        glassView.qualityScale = effectiveQuality;
+                    }
+                    LGAdjustableBlurView *blurView = [iconView viewWithTag:9002];
+                    if (blurView) {
+                        blurView.qualityScale = effectiveQuality;
+                        blurView.blurRadius = effectiveBlurRadius;
+                        [blurView applyFilters];
+                    }
+                });
+            }
+        }
+    };
+    
+    [[NSNotificationCenter defaultCenter] addObserverForName:@"ngkhoi.26home.UpdateGlassQuality" object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification * _Nonnull note) {
+        updateLiveGlassAndBlur();
+    }];
+    
+    [[NSNotificationCenter defaultCenter] addObserverForName:@"ngkhoi.26home.UpdateBlurRadius" object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification * _Nonnull note) {
+        updateLiveGlassAndBlur();
+    }];
+    
     [[NSNotificationCenter defaultCenter] addObserverForName:@"ngkhoi.26home.UpdateLargeIcons" object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification * _Nonnull note) {
         Home26Log(@"=== UpdateLargeIcons Notification Received ===");
         reload26HomePrefs();
@@ -2765,6 +2908,16 @@ static void Home26TriggerGlobalRefresh(void) {
         refreshKnownIcons();
     });
     
+    int qualityToken;
+    notify_register_dispatch("ngkhoi.26home.UpdateGlassQuality", &qualityToken, dispatch_get_main_queue(), ^(int token) {
+        updateLiveGlassAndBlur();
+    });
+    
+    int blurToken;
+    notify_register_dispatch("ngkhoi.26home.UpdateBlurRadius", &blurToken, dispatch_get_main_queue(), ^(int token) {
+        updateLiveGlassAndBlur();
+    });
+    
     // auto theme switch on dark mode toggle
     int darkToken;
     notify_register_dispatch("AppleInterfaceThemeChangedNotification", &darkToken, dispatch_get_main_queue(), ^(int token) {
@@ -2784,19 +2937,6 @@ static void Home26TriggerGlobalRefresh(void) {
             Home26TriggerGlobalRefresh();
         }
     });
-    } else {
-        int clearToken;
-        notify_register_dispatch("ngkhoi.26home.clearCache", &clearToken, dispatch_get_main_queue(), ^(int token) {
-            reload26HomePrefs();
-            [GetIconGenerator() clearDiskCache];
-        });
-
-        int styleToken;
-        notify_register_dispatch("ngkhoi.26home.UpdateIconStyle", &styleToken, dispatch_get_main_queue(), ^(int token) {
-            reload26HomePrefs();
-            [GetIconGenerator() clearCache];
-        });
-    }
 }
 
 
