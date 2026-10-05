@@ -1,78 +1,136 @@
-name: Build 26Home Packages
+name: Build 26Home
 
 on:
   push:
-    branches: [ main ]
-    tags: [ 'v*' ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
   workflow_dispatch:
+    inputs:
+      scheme:
+        description: "Package Scheme"
+        required: false
+        default: "all"
+        type: choice
+        options:
+          - all
+          - rootless
+          - rootful
+          - roothide
 
 jobs:
-  build-rootless:
+  setup:
     runs-on: ubuntu-latest
-    name: Build Rootless Package
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
-      - name: Checkout Code
+      - name: Set matrix
+        id: set-matrix
+        run: |
+          SCHEME="${{ github.event.inputs.scheme }}"
+          if [ -z "$SCHEME" ] || [ "$SCHEME" = "all" ]; then
+            echo 'matrix=["rootless","rootful","roothide"]' >> $GITHUB_OUTPUT
+          else
+            echo "matrix=[\"$SCHEME\"]" >> $GITHUB_OUTPUT
+          fi
+
+  build:
+    needs: setup
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        scheme: ${{ fromJson(needs.setup.outputs.matrix) }}
+      fail-fast: false
+
+    env:
+      DEVICE_TARGET: "iphone:clang:latest:16.0"
+
+    steps:
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           submodules: recursive
-
-      - name: Install Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential fakeroot libtinfo5
 
       - name: Setup Theos
-        uses: themii/action-setup-theos@v1.1
-        with:
-          theos-src: theos/theos
-
-      - name: Download iOS SDK
-        run: |
-          curl -fsSL https://github.com/theos/sdks/releases/latest/download/iPhoneOS16.5.sdk.tar.xz | tar -xJ -C ${{ env.THEOS }}/sdks
-
-      - name: Build Rootless Package
-        run: |
-          make clean
-          make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless
-
-      - name: Upload Rootless Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: 26Home-Rootless-deb
-          path: packages/*.deb
-
-  build-roothide:
-    runs-on: ubuntu-latest
-    name: Build RootHide Package
-    steps:
-      - name: Checkout Code
         uses: actions/checkout@v4
         with:
+          repository: roothide/theos
+          path: theos
           submodules: recursive
 
-      - name: Install Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential fakeroot libtinfo5
-
-      - name: Setup RootHide Theos
-        uses: themii/action-setup-theos@v1.1
+      - name: Cache SDKs
+        id: cache-sdks
+        uses: actions/cache@v4
         with:
-          theos-src: roothide/theos
+          path: theos/sdks
+          key: theos-sdks-16.5
 
-      - name: Download iOS SDK
+      - name: Download SDKs
+        if: steps.cache-sdks.outputs.cache-hit != 'true'
         run: |
-          curl -fsSL https://github.com/theos/sdks/releases/latest/download/iPhoneOS16.5.sdk.tar.xz | tar -xJ -C ${{ env.THEOS }}/sdks
+          curl -LO https://github.com/theos/sdks/archive/master.zip
+          unzip -q master.zip
+          mkdir -p theos/sdks
+          mv sdks-master/*.sdk theos/sdks/
+          rm -rf master.zip sdks-master
 
-      - name: Build RootHide Package
+      - name: Set THEOS env
+        run: echo "THEOS=$GITHUB_WORKSPACE/theos" >> $GITHUB_ENV
+
+      - name: Install dependencies
         run: |
+          brew install ldid make
+          echo "$(brew --prefix make)/libexec/gnubin" >> $GITHUB_PATH
+
+      - name: Build (${{ matrix.scheme }})
+        run: |
+          SCHEME_FLAG=""
+          if [ "${{ matrix.scheme }}" = "rootless" ]; then
+            SCHEME_FLAG="THEOS_PACKAGE_SCHEME=rootless"
+          elif [ "${{ matrix.scheme }}" = "roothide" ]; then
+            SCHEME_FLAG="THEOS_PACKAGE_SCHEME=roothide"
+          fi
           make clean
-          make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=roothide
+          make package \
+            ARCHS="arm64 arm64e" \
+            TARGET="$DEVICE_TARGET" \
+            FINALPACKAGE=1 \
+            $SCHEME_FLAG
 
-      - name: Upload RootHide Artifact
+      - name: Upload Package (${{ matrix.scheme }})
         uses: actions/upload-artifact@v4
         with:
-          name: 26Home-RootHide-deb
+          name: 26Home-${{ matrix.scheme }}
           path: packages/*.deb
+
+  release:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./all-packages
+          pattern: "26Home-*"
+          merge-multiple: true
+
+      - name: Update nightly release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "./all-packages/*.deb"
+          allowUpdates: true
+          tag: nightly
+          name: "Nightly"
+          body: |
+            This build was automatically generated from the latest commit on `main`.
+
+            **Commit SHA:** ${{ github.sha }}
+            **Triggered by:** @${{ github.actor }}
+
+            > [!NOTE]
+            > A nightly build is basically the next update partially done. Additionally, this build might have the old version number but the code itself has the latest commit.
+          prerelease: true
+          token: ${{ secrets.GITHUB_TOKEN }}
