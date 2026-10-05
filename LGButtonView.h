@@ -20,9 +20,12 @@
 - (void)handleTouchDownAtPoint:(CGPoint)point;
 - (void)handleTouchMovedToPoint:(CGPoint)point;
 - (void)handleTouchEnded;
+- (void)setShapeCornerRadius:(CGFloat)radius;
+- (void)setGlowAlpha:(CGFloat)glowAlpha;
+- (void)setLabelAlpha:(CGFloat)labelAlpha;
+- (void)resetToNormalState;
 
 @end
 
-// blocker gesture so cc / coversheet dont steal button drags
 @interface LGLiquidBlockerGesture : UIPanGestureRecognizer <UIGestureRecognizerDelegate>
 @end

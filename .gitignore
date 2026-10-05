@@ -4,6 +4,10 @@ packages/
 *.dylib
 *.o
 *.obj
+*.ipsw
+*.dmg
+*.zip
+*.tar.*
 __pycache__/
 *.py[cod]
 *$py.class

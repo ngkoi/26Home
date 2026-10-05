@@ -1,7 +1,11 @@
 #!/bin/sh
 
-# Set correct permissions for SolidGlass resources
-chmod -R 755 "/var/jb/Library/Application Support/26Home/SolidGlass"
-chown -R mobile:mobile "/var/jb/Library/Application Support/26Home/SolidGlass"
+# Set correct permissions for 26Home resources
+mkdir -p "/var/jb/Library/Application Support/26Home/IconPacks"
+if [ -d "/var/jb/Library/Application Support/26Home/SolidGlass" ] && [ ! -d "/var/jb/Library/Application Support/26Home/IconPacks/SolidGlass" ]; then
+    cp -a "/var/jb/Library/Application Support/26Home/SolidGlass" "/var/jb/Library/Application Support/26Home/IconPacks/SolidGlass"
+fi
+chmod -R 777 "/var/jb/Library/Application Support/26Home"
+chown -R mobile:mobile "/var/jb/Library/Application Support/26Home"
 
 exit 0

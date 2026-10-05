@@ -9,4 +9,4 @@
 #import "LGSpecularHighlightView.h"
 #import "LGButtonView.h"
 
-#endif /* LGFRAMEWORK_H */
+#endif

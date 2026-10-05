@@ -31,9 +31,47 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
+			<string>Icons Pack Manager</string>
+			<key>footerText</key>
+			<string>Manage or download icon packs</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>detail</key>
+			<string>Home26IconPacksListController</string>
+			<key>isController</key>
+			<true/>
+			<key>label</key>
+			<string>Icons Pack Manager</string>
+		</dict>
+
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>Icon Generation Engine</string>
+			<key>footerText</key>
+			<string>Choose between 26 Specular (45°), 27 Specular (90°), or No specular.</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>detail</key>
+			<string>Home26IconGenConfigController</string>
+			<key>isController</key>
+			<true/>
+			<key>label</key>
+			<string>IconGen Config</string>
+		</dict>
+
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
 			<string>Exceptions</string>
 			<key>footerText</key>
-			<string>When "Keep Clear &amp; Tinted icons" is enabled, exception apps will still receive transparency masks in Clear and Tinted themes so they don't look broken.</string>
+			<string>When "Keep Clear &amp; Tinted icons" is enabled, exception apps still receive live effects in Clear and Tinted themes. "No icons processing" retains stock icon artwork without running through IconGen.</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -56,6 +94,20 @@
 			<string>ngkhoi.26home.exceptionsApplyOnlyToSolid</string>
 			<key>label</key>
 			<string>Keep Clear &amp; Tinted icons</string>
+			<key>PostNotification</key>
+			<string>ngkhoi.26home.clearCache</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.ngkhoi.26home</string>
+			<key>key</key>
+			<string>ngkhoi.26home.exceptionsNoIconProcessing</string>
+			<key>label</key>
+			<string>No icons processing</string>
 			<key>PostNotification</key>
 			<string>ngkhoi.26home.clearCache</string>
 		</dict>
@@ -99,7 +151,7 @@
 			<key>min</key>
 			<real>0.10</real>
 			<key>max</key>
-			<real>0.75</real>
+			<real>1.0</real>
 			<key>showValue</key>
 			<true/>
 			<key>key</key>

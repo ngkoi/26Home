@@ -18,10 +18,10 @@
         _strokeWidth = 1.5;
         _topSpecularOpacity = 0.65;
         _bottomSpecularOpacity = 0.35;
-        
+
         self.userInteractionEnabled = NO;
         self.backgroundColor = [UIColor clearColor];
-        
+
         self.specularRim = [CAGradientLayer layer];
         self.specularRim.colors = @[(id)[UIColor colorWithWhite:1.0 alpha:_topSpecularOpacity].CGColor,
                                     (id)[UIColor colorWithWhite:1.0 alpha:0.0].CGColor,
@@ -30,13 +30,13 @@
         self.specularRim.locations = @[@0.0, @0.35, @0.65, @1.0];
         self.specularRim.startPoint = CGPointMake(0, 0);
         self.specularRim.endPoint = CGPointMake(1, 1);
-        
+
         self.rimMask = [CAShapeLayer layer];
         self.rimMask.fillColor = [UIColor clearColor].CGColor;
         self.rimMask.strokeColor = [UIColor whiteColor].CGColor;
         self.rimMask.lineWidth = _strokeWidth;
         self.specularRim.mask = self.rimMask;
-        
+
         [self.layer addSublayer:self.specularRim];
     }
     return self;

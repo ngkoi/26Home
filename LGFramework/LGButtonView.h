@@ -23,6 +23,5 @@
 
 @end
 
-// Blocker gesture so Control Center / CoverSheet dont steal button drags
 @interface LGLiquidBlockerGesture : UIPanGestureRecognizer <UIGestureRecognizerDelegate>
 @end

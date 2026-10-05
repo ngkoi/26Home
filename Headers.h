@@ -5,12 +5,55 @@
 #if __has_include(<roothide.h>)
 #import <roothide.h>
 #else
-#define jbroot(path) [@"/var/jb" stringByAppendingString:path]
+static inline NSString *Home26JbRoot(NSString *path) {
+    if (!path) return nil;
+    static NSString *s_jbroot_prefix = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        typedef const char *(*roothide_jbroot_t)(const char *);
+        roothide_jbroot_t roothide_fn = (roothide_jbroot_t)dlsym(RTLD_DEFAULT, "jbroot");
+        if (roothide_fn) {
+            const char *res = roothide_fn("/Library");
+            if (res) {
+                NSString *str = [NSString stringWithUTF8String:res];
+                if ([str hasSuffix:@"/Library"]) {
+                    s_jbroot_prefix = [str substringToIndex:str.length - @"/Library".length];
+                }
+            }
+        }
+        if (!s_jbroot_prefix) {
+            typedef const char *(*libroot_prefix_t)(void);
+            libroot_prefix_t libroot_fn = (libroot_prefix_t)dlsym(RTLD_DEFAULT, "libroot_dyn_get_jbroot_prefix");
+            if (libroot_fn) {
+                const char *res = libroot_fn();
+                if (res && strlen(res) > 0) {
+                    s_jbroot_prefix = [NSString stringWithUTF8String:res];
+                }
+            }
+        }
+        if (!s_jbroot_prefix) {
+            if ([[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb"]) {
+                s_jbroot_prefix = @"/var/jb";
+            } else {
+                s_jbroot_prefix = @"";
+            }
+        }
+    });
+    if (s_jbroot_prefix.length > 0) {
+        if (![path hasPrefix:@"/"]) {
+            return [s_jbroot_prefix stringByAppendingPathComponent:path];
+        }
+        return [s_jbroot_prefix stringByAppendingString:path];
+    }
+    return path;
+}
+#define jbroot(path) Home26JbRoot(path)
 #endif
 
 #import "LGDebugger.h"
 
 @interface SBHEditingWidgetButton : UIButton
+- (void)_26home_handleEditButtonTap;
 @end
 
 @interface SBHEditingDoneButton : UIButton
@@ -34,22 +77,61 @@ struct SBIconImageInfo {
     CGFloat continuousCornerRadius;
 };
 
+static inline UIBezierPath *Home26CreateSquirclePath(CGRect rect, CGFloat radius) {
+    return [UIBezierPath bezierPathWithRoundedRect:rect cornerRadius:radius];
+}
+
 @interface SBRootFolderView : UIView
 @end
 
-@class SBIcon;
+@interface SBIcon : NSObject
+@property (nonatomic, copy, readonly) NSString *applicationBundleID;
+- (NSString *)applicationBundleID;
+- (UIImage *)unmaskedIconImageWithInfo:(struct SBIconImageInfo)info;
+- (UIImage *)iconImageWithInfo:(struct SBIconImageInfo)info;
+- (id)parentFolderIcon;
+- (id)folder;
+- (BOOL)isFolderIcon;
+- (void)reloadIconImage;
+- (void)purgeCachedImages;
+- (void)_notifyImageDidUpdate;
+@end
 
 @interface SBFolderIconImageCache : NSObject
+- (void)rebuildImagesForFolderIcon:(id)folderIcon;
+- (void)informObserversOfUpdateForFolderIcon:(id)folderIcon;
+- (void)folderIcon:(id)folderIcon containedIconImageDidUpdate:(id)containedIcon;
+- (void)iconImageCache:(id)cache didUpdateImageForIcon:(id)icon;
+@end
+
+@interface SBFolderIcon : SBIcon
+- (id)folder;
+- (void)iconImageDidUpdate:(id)icon;
+- (void)_26home_purgeCache;
 @end
 
 @interface SBIconView : UIView
-@property (nonatomic, retain) SBIcon *icon; 
+@property (nonatomic, retain) SBIcon *icon;
 @property (nonatomic, strong, readwrite) SBFolderIconImageCache *folderIconImageCache;
+- (struct SBIconImageInfo)iconImageInfo;
+- (UIView *)labelView;
+- (BOOL)isFolderIcon;
 - (void)_26home_updateGlassVisibility;
 - (void)_26home_updateIconStyle;
 - (void)_26home_updateCustomScale;
 - (BOOL)isHighlighted;
 - (BOOL)isTouchDown;
+@end
+
+@interface SBIconImageView : UIView
+- (UIImage *)displayedImage;
+- (struct SBIconImageInfo)iconImageInfo;
+- (void)updateImageAnimated:(BOOL)animated;
+@end
+
+@interface SBFolderIconImageView : SBIconImageView
+- (void)_26home_forceUpdate;
+- (void)folderIconImageCache:(id)cache didUpdateImagesForFolderIcon:(id)folderIcon;
 @end
 
 @interface SpringBoard : UIApplication
@@ -106,7 +188,7 @@ static inline __attribute__((unused)) UIViewController *getViewControllerForView
     return nil;
 }
 
-static NSString * const kLGFilterType = @"dylv.liquidglass.refraction";
+static NSString * const kLGFilterType = @"dylv.liquidglass.folder";
 
 extern NSString *g_iconStyle;
 extern NSString *g_themeMode;
@@ -128,15 +210,15 @@ static inline UIImage *LGImageNamed(NSString *name) {
     NSString *path = jbroot([NSString stringWithFormat:@"/Library/Application Support/26Home/Icons/%@@3x.png", name]);
     UIImage *img = [UIImage imageWithContentsOfFile:path];
     if (img) return [[[UIImage alloc] initWithCGImage:img.CGImage scale:3.0 orientation:img.imageOrientation] imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-    
+
     path = jbroot([NSString stringWithFormat:@"/Library/Application Support/26Home/Icons/%@@2x.png", name]);
     img = [UIImage imageWithContentsOfFile:path];
     if (img) return [[[UIImage alloc] initWithCGImage:img.CGImage scale:2.0 orientation:img.imageOrientation] imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-    
+
     path = jbroot([NSString stringWithFormat:@"/Library/Application Support/26Home/Icons/%@.png", name]);
     img = [UIImage imageWithContentsOfFile:path];
     if (img) return [img imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-    
+
     return [[UIImage systemImageNamed:name] imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
 }
 
@@ -172,7 +254,6 @@ static inline UIImage *LGImageNamed(NSString *name) {
 @property (nonatomic, strong) NSMutableArray<UILabel *> *themeLabels;
 @property (nonatomic, strong) NSMutableArray<UIButton *> *themeButtons;
 
-// tinted mode ui
 @property (nonatomic, strong) UIView *slidersContainer;
 @property (nonatomic, strong) UIView *hueSlider;
 @property (nonatomic, strong) UIView *hueThumb;
@@ -229,20 +310,18 @@ static inline UIImage *LGImageNamed(NSString *name) {
 - (void)loadImageWithScale:(double)scale isDarkStyle:(BOOL)isDark completionHandler:(void (^)(UIImage *))completionHandler;
 @end
 
-
 @interface SearchUIHomeScreenAppIconView : UIView
 @end
 
-
 @interface SearchUIImage : NSObject
 - (UIImage *)uiImage;
+- (NSString *)bundleIdentifier;
+- (id)loadImageWithScale:(double)scale isDarkStyle:(BOOL)isDarkStyle;
 @end
-
 
 @interface NCNotificationViewController : UIViewController
 - (void)updateContent;
 @end
-
 
 @interface SBHIconImageCache : NSObject
 - (UIImage *)imageForIcon:(id)icon;
@@ -251,4 +330,20 @@ static inline UIImage *LGImageNamed(NSString *name) {
 - (UIImage *)_unmaskedIconImageWithInfo:(struct SBIconImageInfo)info forIcon:(id)icon;
 @end
 
+#import <Preferences/PSSpecifier.h>
+#import <Preferences/PSTableCell.h>
+
+@interface PSTableCell (Home26Private)
+- (UIImageView *)iconImageView;
+@end
+
+@interface UIImage (Private)
++ (UIImage *)_applicationIconImageForBundleIdentifier:(NSString *)bundleID format:(int)format scale:(CGFloat)scale;
+@end
+
+extern BOOL isAppInExceptionList(NSString *bundleID);
 extern BOOL isAppExcluded(NSString *bundleID);
+extern BOOL isAppExcludedFromEffects(NSString *bundleID);
+extern BOOL g_exceptionsNoIconProcessing;
+extern BOOL g_exceptionsApplyOnlyToSolid;
+

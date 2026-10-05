@@ -19,7 +19,7 @@
 }
 
 - (void)setQualityScale:(CGFloat)qualityScale {
-    _qualityScale = fminf(fmaxf(qualityScale, 0.10), 0.75);
+    _qualityScale = fminf(fmaxf(qualityScale, 0.10), 1.0);
     CALayer *layer = self.layer;
     if (layer) {
         @try {
@@ -30,6 +30,12 @@
 
 - (void)setBlurRadius:(CGFloat)blurRadius {
     _blurRadius = blurRadius;
+    if (_blurRadius <= 0.0) {
+        self.layer.filters = @[];
+        self.hidden = YES;
+        return;
+    }
+    self.hidden = NO;
     CALayer *layer = self.layer;
     if (layer) {
         NSArray *existing = layer.filters;
@@ -46,9 +52,15 @@
 }
 
 - (void)didMoveToWindow { [super didMoveToWindow]; [self applyFilters]; }
-- (void)layoutSubviews  { [super layoutSubviews];  [self applyFilters]; }
+- (void)layoutSubviews  { [super layoutSubviews]; if (self.layer.filters.count == 0) [self applyFilters]; }
 
 - (void)applyFilters {
+    if (self.blurRadius <= 0.0) {
+        self.layer.filters = @[];
+        self.hidden = YES;
+        return;
+    }
+    self.hidden = NO;
     CALayer *layer = self.layer;
     Class backdropCls = NSClassFromString(@"CABackdropLayer");
     if (!backdropCls || ![layer isKindOfClass:backdropCls]) return;
@@ -61,7 +73,6 @@
         }
         [layer setValue:@(self.qualityScale) forKey:@"scale"];
 
-        // skip if filter set with same radius, avoids oom
         NSArray *existing = layer.filters;
         if (existing.count == 1) {
             NSString *type = nil;
@@ -80,7 +91,7 @@
 
         id blurFilter = ((id (*)(Class, SEL, NSString *))objc_msgSend)(
             filterCls, NSSelectorFromString(@"filterWithType:"), @"gaussianBlur");
-            
+
         if (blurFilter) {
             [blurFilter setValue:@(self.blurRadius) forKey:@"inputRadius"];
             layer.filters = @[blurFilter];

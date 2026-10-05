@@ -1,0 +1,78 @@
+name: Build 26Home Packages
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-rootless:
+    runs-on: ubuntu-latest
+    name: Build Rootless Package
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential fakeroot libtinfo5
+
+      - name: Setup Theos
+        uses: themii/action-setup-theos@v1.1
+        with:
+          theos-src: theos/theos
+
+      - name: Download iOS SDK
+        run: |
+          curl -fsSL https://github.com/theos/sdks/releases/latest/download/iPhoneOS16.5.sdk.tar.xz | tar -xJ -C ${{ env.THEOS }}/sdks
+
+      - name: Build Rootless Package
+        run: |
+          make clean
+          make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless
+
+      - name: Upload Rootless Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: 26Home-Rootless-deb
+          path: packages/*.deb
+
+  build-roothide:
+    runs-on: ubuntu-latest
+    name: Build RootHide Package
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential fakeroot libtinfo5
+
+      - name: Setup RootHide Theos
+        uses: themii/action-setup-theos@v1.1
+        with:
+          theos-src: roothide/theos
+
+      - name: Download iOS SDK
+        run: |
+          curl -fsSL https://github.com/theos/sdks/releases/latest/download/iPhoneOS16.5.sdk.tar.xz | tar -xJ -C ${{ env.THEOS }}/sdks
+
+      - name: Build RootHide Package
+        run: |
+          make clean
+          make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=roothide
+
+      - name: Upload RootHide Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: 26Home-RootHide-deb
+          path: packages/*.deb

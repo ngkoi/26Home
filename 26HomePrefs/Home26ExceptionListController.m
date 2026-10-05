@@ -43,21 +43,18 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.title = @"Exception List";
-    
-    // load excluded apps dict
+
     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.ngkhoi.26home"];
     NSDictionary *stored = [defaults dictionaryForKey:@"ngkhoi.26home.excludedApps"];
     self.excludedApps = stored ? [stored mutableCopy] : [NSMutableDictionary dictionary];
-    
-    // tableview setup
+
     self.tableView = [[UITableView alloc] initWithFrame:self.view.bounds style:UITableViewStyleInsetGrouped];
     self.tableView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     self.tableView.dataSource = self;
     self.tableView.delegate = self;
     self.tableView.rowHeight = 56.0;
     [self.view addSubview:self.tableView];
-    
-    // search controller
+
     self.searchController = [[UISearchController alloc] initWithSearchResultsController:nil];
     self.searchController.searchResultsUpdater = self;
     self.searchController.obscuresBackgroundDuringPresentation = NO;
@@ -65,18 +62,17 @@
     self.navigationItem.searchController = self.searchController;
     self.navigationItem.hidesSearchBarWhenScrolling = NO;
     self.definesPresentationContext = YES;
-    
-    // reset / actions button
+
     UIBarButtonItem *resetBtn = [[UIBarButtonItem alloc] initWithTitle:@"Reset All" style:UIBarButtonItemStylePlain target:self action:@selector(resetAll:)];
     self.navigationItem.rightBarButtonItem = resetBtn;
-    
+
     [self loadInstalledApps];
 }
 
 - (void)loadInstalledApps {
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         NSMutableArray<Home26AppModel *> *appsList = [NSMutableArray array];
-        
+
         Class workspaceClass = NSClassFromString(@"LSApplicationWorkspace");
         if (workspaceClass) {
             id workspace = [workspaceClass performSelector:@selector(defaultWorkspace)];
@@ -86,33 +82,29 @@
             } else if ([workspace respondsToSelector:@selector(allApplications)]) {
                 installed = [workspace performSelector:@selector(allApplications)];
             }
-            
+
             for (id proxy in installed) {
                 if ([proxy respondsToSelector:@selector(isPlaceholder)] && [proxy isPlaceholder]) continue;
                 if ([proxy respondsToSelector:@selector(isLaunchProhibited)] && [proxy isLaunchProhibited]) continue;
-                
+
                 NSString *bid = [proxy respondsToSelector:@selector(bundleIdentifier)] ? [proxy bundleIdentifier] : nil;
                 NSString *name = [proxy respondsToSelector:@selector(localizedName)] ? [proxy localizedName] : nil;
-                
+
                 if (!bid || bid.length == 0) continue;
                 if (!name || name.length == 0) name = bid;
-                
+
                 Home26AppModel *model = [[Home26AppModel alloc] init];
                 model.bundleID = bid;
                 model.name = name;
-                
-                // app icon (29x29 format 0)
 
                 UIImage *rawIcon = nil;
-                // Try LSApplicationProxy first to bypass SnowBoard
+
                 @try {
                     Class lsProxyClass = NSClassFromString(@"LSApplicationProxy");
                     if (lsProxyClass) {
                         id proxy = [lsProxyClass performSelector:@selector(applicationProxyForIdentifier:) withObject:bid];
                         if (proxy && [proxy respondsToSelector:@selector(iconDataForVariant:)]) {
-                            // variant 2 is usually small/medium, variant 1 is tiny, variant 0 is generic?
-                            // Let's try 17 or 20 (standard variants) or just fallback to generic
-                            // Just try 1 (29x29) or 2 (60x60) or 17 (App Store)
+
                             for (int variant = 2; variant <= 5; variant++) {
                                 id data = [proxy performSelector:@selector(iconDataForVariant:) withObject:@(variant)];
                                 if (data && [data isKindOfClass:[NSData class]]) {
@@ -123,7 +115,7 @@
                         }
                     }
                 } @catch (NSException *e) {}
-                
+
                 if (!rawIcon && [UIImage respondsToSelector:@selector(_applicationIconImageForBundleIdentifier:format:scale:)]) {
                     rawIcon = [UIImage _applicationIconImageForBundleIdentifier:bid format:0 scale:[UIScreen mainScreen].scale];
                 }
@@ -139,16 +131,15 @@
                     }
                 }
                 model.icon = rawIcon;
-                
+
                 [appsList addObject:model];
             }
         }
-        
-        // sort by display name
+
         [appsList sortUsingComparator:^NSComparisonResult(Home26AppModel *a, Home26AppModel *b) {
             return [a.name localizedCaseInsensitiveCompare:b.name];
         }];
-        
+
         dispatch_async(dispatch_get_main_queue(), ^{
             self.allApps = appsList;
             self.filteredApps = appsList;
@@ -159,7 +150,7 @@
 
 - (void)resetAll:(id)sender {
     if (self.excludedApps.count == 0) return;
-    
+
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Reset Exceptions"
                                                                    message:@"Do you want to clear all excluded apps and theme all icons?"
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
@@ -177,11 +168,10 @@
     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.ngkhoi.26home"];
     [defaults setObject:self.excludedApps forKey:@"ngkhoi.26home.excludedApps"];
     [defaults synchronize];
-    
+
     CFPreferencesSetAppValue(CFSTR("ngkhoi.26home.excludedApps"), (__bridge CFPropertyListRef)self.excludedApps, CFSTR("com.ngkhoi.26home"));
     CFPreferencesAppSynchronize(CFSTR("com.ngkhoi.26home"));
-    
-    // notify tweak
+
     notify_post("ngkhoi.26home.clearCache");
     notify_post("ngkhoi.26home.UpdateIconStyle");
 }
@@ -222,33 +212,33 @@
     if (!cell) {
         cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:cellID];
         cell.selectionStyle = UITableViewCellSelectionStyleNone;
-        
+
         UISwitch *sw = [[UISwitch alloc] init];
         [sw addTarget:self action:@selector(switchToggled:) forControlEvents:UIControlEventValueChanged];
         cell.accessoryView = sw;
-        
+
         cell.imageView.layer.cornerRadius = 7.0;
         cell.imageView.clipsToBounds = YES;
         if (@available(iOS 13.0, *)) {
             cell.imageView.layer.cornerCurve = kCACornerCurveContinuous;
         }
     }
-    
+
     Home26AppModel *model = self.filteredApps[indexPath.row];
     cell.textLabel.text = model.name;
     cell.textLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
-    
+
     cell.detailTextLabel.text = model.bundleID;
     cell.detailTextLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightRegular];
     cell.detailTextLabel.textColor = [UIColor secondaryLabelColor];
-    
+
     cell.imageView.image = model.icon;
-    
+
     UISwitch *sw = (UISwitch *)cell.accessoryView;
     sw.tag = indexPath.row;
     BOOL isExcluded = [self.excludedApps[model.bundleID] boolValue];
     sw.on = isExcluded;
-    
+
     return cell;
 }
 

@@ -18,7 +18,7 @@
 }
 
 - (void)setQualityScale:(CGFloat)qualityScale {
-    _qualityScale = fminf(fmaxf(qualityScale, 0.10), 0.75);
+    _qualityScale = fminf(fmaxf(qualityScale, 0.10), 1.0);
     CALayer *layer = self.layer;
     if (layer) {
         @try {
@@ -38,7 +38,7 @@
     @try {
         [layer setValue:@NO  forKey:@"layerUsesCoreImageFilters"];
         [layer setValue:@(!self.capturesAppIcon) forKey:@"windowServerAware"];
-        
+
         if (self.capturesAppIcon) {
             [layer setValue:[NSString stringWithFormat:@"dylv.liquidglass.refract.%p", self] forKey:@"groupName"];
         } else {
@@ -49,7 +49,6 @@
         [layer setValue:@"dylv.liquidglass" forKey:@"groupNamespace"];
         [layer setValue:@(self.qualityScale) forKey:@"scale"];
 
-        // skip if filter set, avoids oom from repeated alloc
         NSArray *existing = layer.filters;
         if (existing.count == 1) {
             NSString *type = nil;
@@ -62,7 +61,7 @@
 
         id glassFilter = ((id (*)(Class, SEL, NSString *))objc_msgSend)(
             filterCls, NSSelectorFromString(@"filterWithType:"), kLGFilterType);
-            
+
         if (glassFilter) {
             layer.filters = @[glassFilter];
         }

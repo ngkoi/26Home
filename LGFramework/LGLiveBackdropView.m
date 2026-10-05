@@ -45,7 +45,7 @@
     @try {
         [layer setValue:@NO forKey:@"layerUsesCoreImageFilters"];
         [layer setValue:@(!self.capturesAppIcon) forKey:@"windowServerAware"];
-        
+
         if (self.capturesAppIcon) {
             [layer setValue:[NSString stringWithFormat:@"dylv.liquidglass.refract.%p", self] forKey:@"groupName"];
         } else {
@@ -57,7 +57,6 @@
         [layer setValue:@"dylv.liquidglass" forKey:@"groupNamespace"];
         [layer setValue:@(self.qualityScale) forKey:@"scale"];
 
-        // Idempotent guard: skip if already configured with this filter to prevent surface allocation loops / OOM
         NSArray *existing = layer.filters;
         if (existing.count == 1) {
             NSString *type = nil;
@@ -70,7 +69,7 @@
 
         id glassFilter = ((id (*)(Class, SEL, NSString *))objc_msgSend)(
             filterCls, NSSelectorFromString(@"filterWithType:"), kLGFilterType);
-            
+
         if (glassFilter) {
             layer.filters = @[glassFilter];
         }

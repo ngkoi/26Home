@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 26Home SolidGlass Icon Rounder
-Applies Apple's continuous squircle corner radius (ratio 0.225) to all PNG icons in SolidGlass.
+Applies circular rounded corner radius (ratio 0.256) to all PNG icons in SolidGlass.
 """
 
 import os
@@ -14,7 +14,7 @@ import numpy as np
 
 BASE_DIR = "/home/ngkhoi/26Home/layout/Library/Application Support/26Home/SolidGlass"
 TARGET_FOLDERS = ["ClearLight", "ClearDark", "Dark", "Light", "DefaultNS", "DarkNS"]
-CORNER_RADIUS_RATIO = 0.225
+CORNER_RADIUS_RATIO = 0.256
 
 def make_squircle_mask(size):
     """

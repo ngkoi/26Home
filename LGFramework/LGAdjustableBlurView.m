@@ -58,7 +58,6 @@
         }
         [layer setValue:@(self.qualityScale) forKey:@"scale"];
 
-        // Idempotent guard: skip if already configured with this radius to prevent surface allocation loops / OOM
         NSArray *existing = layer.filters;
         if (existing.count == 1) {
             NSString *type = nil;
@@ -77,7 +76,7 @@
 
         id blurFilter = ((id (*)(Class, SEL, NSString *))objc_msgSend)(
             filterCls, NSSelectorFromString(@"filterWithType:"), @"gaussianBlur");
-            
+
         if (blurFilter) {
             [blurFilter setValue:@(self.blurRadius) forKey:@"inputRadius"];
             layer.filters = @[blurFilter];
