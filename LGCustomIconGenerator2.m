@@ -1735,7 +1735,7 @@ typedef struct {
         free(tempMask);
     }
 
-    CGContextRef maskCtx = CGBitmapContextCreate(maskData, width, height, 8, width, NULL, kCGImageAlphaOnly);
+    CGContextRef maskCtx = CGBitmapContextCreate(maskData, width, height, 8, width, NULL, (CGBitmapInfo)kCGImageAlphaOnly);
     CGImageRef maskImage = CGBitmapContextCreateImage(maskCtx);
     CGContextRelease(maskCtx);
     free(maskData);
